@@ -20,9 +20,11 @@ Empty.     Stmt ::= ";" ;
 
 FnDef.	   Stmt ::= Type Ident "(" [Arg] ")" Block ;
 
-Arg. 	   Arg ::= Type Ident ;
+ArgVal.	   Arg ::= Type Ident ;
 
-ArgR. 	   Arg ::= Type "&" Ident ;
+ArgRef.	   Arg ::= Type "&" Ident ;
+
+ArrArg.	   Arg ::= ArrayType Ident ;
 
 separator  Arg "," ;
 
@@ -36,6 +38,8 @@ SExp.      Stmt ::= Expr ";" ;
 ---- variable declarations
 
 VarDecl.   Stmt ::= Type [Item] ";" ;
+
+ArrayDecl. Stmt ::= ArrayType Ident "=" "{" [Expr] "}" ";" ;
 
 NoInit.    Item ::= Ident ; 
 
@@ -79,11 +83,17 @@ Bool.      Type ::= "bool" ;
 
 Void.      Type ::= "void" ;
 
+Array.     ArrayType ::= Type "[]" ;
+
 ------------------------------------------------------------
 --                   expressions                          -- 
 ------------------------------------------------------------
 
 EVar.      Expr6 ::= Ident ;
+
+EArrItem.  Expr6 ::= Ident "[" Expr "]" ;
+
+EArrLen.   Expr6 ::= "len" "(" Ident ")" ;
 
 ELitInt.   Expr6 ::= Integer ;
 
