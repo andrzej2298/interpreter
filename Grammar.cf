@@ -1,3 +1,7 @@
+-- this grammar was based on the grammar for the Latte
+-- programming language available here:
+-- https://www.mimuw.edu.pl/~ben/Zajecia/Mrj2019/Latte/
+
 ------------------------------------------------------------
 --                   programs                             -- 
 ------------------------------------------------------------
@@ -24,8 +28,6 @@ ArgVal.	   Arg ::= Type Ident ;
 
 ArgRef.	   Arg ::= Type "&" Ident ;
 
-ArrArg.	   Arg ::= ArrayType Ident ;
-
 separator  Arg "," ;
 
 Ret.       Stmt ::= "return" Expr ";" ;
@@ -39,8 +41,6 @@ SExp.      Stmt ::= Expr ";" ;
 
 VarDecl.   Stmt ::= Type [Item] ";" ;
 
-ArrayDecl. Stmt ::= ArrayType Ident "=" "{" [Expr] "}" ";" ;
-
 NoInit.    Item ::= Ident ; 
 
 Init.      Item ::= Ident "=" Expr ;
@@ -49,11 +49,26 @@ separator nonempty Item "," ;
 
 ---- variable assignments
 
-Ass.       Stmt ::= Ident "=" Expr  ";" ;
+Assign.    Stmt ::= Ident "=" Expr  ";" ;
+
+ArrAssign. Stmt ::= Ident "[" Expr "]" "=" Expr  ";" ;
+
+TupAssign. Stmt ::= Ident "[" Integer "]" "=" Expr  ";" ;
+
+TupTie.    Stmt ::= "tie" "(" [TieVar] ")" "=" Expr  ";" ;
 
 Incr.      Stmt ::= Ident "++" ";" ;
 
 Decr.      Stmt ::= Ident "--" ";" ;
+
+-- tuple tying
+TieVars.   TieVar ::= "(" [TieVar] ")" ;
+
+TieVar.    TieVar ::= Ident ;
+
+TieIgnore. TieVar ::= "_" ;
+
+separator  TieVar "," ;
 
 ---- loops and conditionals
 
@@ -83,7 +98,11 @@ Bool.      Type ::= "bool" ;
 
 Void.      Type ::= "void" ;
 
-Array.     ArrayType ::= Type "[]" ;
+Array.     Type ::= Type "[]" ;
+
+Tuple.     Type ::= "<" [Type] ">" ;
+
+separator  Type "," ;
 
 ------------------------------------------------------------
 --                   expressions                          -- 
@@ -93,7 +112,16 @@ EVar.      Expr6 ::= Ident ;
 
 EArrItem.  Expr6 ::= Ident "[" Expr "]" ;
 
-EArrLen.   Expr6 ::= "len" "(" Ident ")" ;
+ETupItem.  Expr6 ::= Ident "[" Integer "]" ;
+
+-- for explicit array declaration
+EArrExp.   Expr6 ::= "{" [Expr] "}" ;
+
+-- for array declaration with default values
+EArrDef.   Expr6 ::= "new" Type "[" Expr "]" ;
+
+-- for tuple declaration
+ETupLit.   Expr6 ::= "new" "tuple" "(" [Expr] ")" ;
 
 ELitInt.   Expr6 ::= Integer ;
 
