@@ -1,28 +1,24 @@
 # Opis języka
-```java
-int[] a = {1,2,3};
-int[] b = new int[10];
-
-int c = a[0];
-b[0] = 1;
-int e = len(a);
-```
 
 Statycznie typowany język imperatywny
 ze składnią wzorowana na C, C++ i Javie.
+Podstawowe konstrukcje (pętle, instrukcje warunkowe,
+deklaracja zmiennych itp.)
+mają semantykę tradycyjną, jak w powyżej wymienionych językach.
 
 # Typy proste
 
 - int
 - bool
 - string
-- void
+- void (dla funkcji nie dających wyniku)
 
 # Typy złożone
 
 ## Tablice
 
-- stałej długości tablice typów int, bool, string (nie można robić tablic tablic ani tablic krotek)
+- stałej długości tablice typów int, bool, string (nie można robić tablic tablic
+  ani tablic krotek)
 - składnia podobna do Javy
 - dodatkowa funkcja len() pobierająca długość tablicy
 - inicjalizacja literałem lub podanie długości i inicjalizacja wartościami domyślnymi
@@ -40,11 +36,12 @@ int e = len(a);
 
 ## Zagnieżdżone krotki
 
-- potencjalnie zagnieżdżone krotki typów int, bool, string (elementem krotki nie może być tablica)
-- składnia tie inspirowana std::tie z C++, przy tutaj obsługujemy zagnieżdżone przypisanie
+- zagnieżdżone krotki typów int, bool, string (elementem krotki nie może być tablica)
+- składnia przypisania z krotki, tie, inspirowana std::tie z C++,
+  przy czym tutaj obsługujemy zagnieżdżone przypisanie
 - wartości można pobierać z krotki za pomocą nawiasów kwadratowych
-  (ze względu na kontrolę typów indeks w krotce musi być literałem liczby całkowitej)
-- wartości można aktualizować za pomocą nawiasów kwadratowych
+- ze względu na kontrolę typów indeks użyty do pobrania
+  wartości w krotce musi być liczbą całkowitą znaną przed wykonaniem programu
 
 ```
 <int, bool, string> x = new tuple(1, true, "string");
@@ -52,6 +49,14 @@ int e = len(a);
 int i; bool a; string s;
 tie (i, b, s) = y;
 
-y[0] = 2;
-bool d = y[2];
+bool d = y[1];
 ```
+
+# Funkcje
+
+dowolnie zagnieżdżone definicje funkcji z zachowaniem poprawności
+statycznego wiązania identyfikatorów (jak w Pascalu)
+
+# Błędy wykonania
+
+obsługa błędów wykonania wraz z podaniem miejsca wystąpienia błędu

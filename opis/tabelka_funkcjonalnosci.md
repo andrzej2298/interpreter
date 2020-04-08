@@ -11,9 +11,9 @@ do wyboru jedno z:
 08. [ ] zmienne read-only i pętla for
 
 # Na 20 punktów
-09. [X] (przesłanianie i statyczne wiązanie)
-10. [X] (obsługa błędów wykonania)
-11. [X] (funkcje zwracające wartość)
+09. [X] przesłanianie i statyczne wiązanie
+10. [X] obsługa błędów wykonania
+11. [X] funkcje zwracające wartość
 
 # Na 30 punktów
 12. [X] (4) statyczne typowanie

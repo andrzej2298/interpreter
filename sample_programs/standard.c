@@ -1,23 +1,23 @@
-// types, variables
+// TYPES, VARIABLES
 int i;
 bool b;
 string s;
 
-// literals
+// LITERALS
 int i' = 1;
 bool b' = true;
 string s' = "string";
 
-// arithmetic, assignments
+// ARITHMETIC, ASSIGNMENTS
 i = i' + 10 - 2 * 8;
 
-// comparison operators
+// COMPARISON OPERATORS
 b = 7 < 8;
 
-// standard output
+// STANDARD OUTPUT
 print("Hello, world!\n");
 
-// conditionals and loops
+// CONDITIONALS AND LOOPS
 if (true && b') {}
 else {}
 
@@ -25,8 +25,9 @@ while (false) {
     i++;
 }
 
-// functions, pass by reference/value
+// FUNCTIONS, PASS BY REFERENCE/VALUE
 int f(int &i, int j) {
+    i = 10;
     return i + j;
 }
 

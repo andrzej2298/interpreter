@@ -51,15 +51,13 @@ separator nonempty Item "," ;
 
 Assign.    Stmt ::= Ident "=" Expr  ";" ;
 
-ArrAssign. Stmt ::= Ident "[" Expr "]" "=" Expr  ";" ;
-
-TupAssign. Stmt ::= Ident "[" Integer "]" "=" Expr  ";" ;
-
-TupTie.    Stmt ::= "tie" "(" [TieVar] ")" "=" Expr  ";" ;
-
 Incr.      Stmt ::= Ident "++" ";" ;
 
 Decr.      Stmt ::= Ident "--" ";" ;
+
+IndAssign. Stmt ::= Ident "[" Expr "]" "=" Expr  ";" ;
+
+TupTie.    Stmt ::= "tie" "(" [TieVar] ")" "=" Expr  ";" ;
 
 -- tuple tying
 TieVars.   TieVar ::= "(" [TieVar] ")" ;
@@ -110,9 +108,7 @@ separator  Type "," ;
 
 EVar.      Expr6 ::= Ident ;
 
-EArrItem.  Expr6 ::= Ident "[" Expr "]" ;
-
-ETupItem.  Expr6 ::= Ident "[" Integer "]" ;
+EItemInd.  Expr6 ::= Ident "[" Expr "]" ;
 
 -- for explicit array declaration
 EArrExp.   Expr6 ::= "{" [Expr] "}" ;
