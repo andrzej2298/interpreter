@@ -1,0 +1,9 @@
+#!/bin/bash
+
+INTERPRETER=build/Interpreter
+if test -f "$INTERPRETER"; then
+    $INTERPRETER "$@"
+else
+    echo "no executable found, build the project first"
+fi
+

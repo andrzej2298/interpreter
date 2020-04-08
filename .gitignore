@@ -3,3 +3,5 @@ build
 *.swp
 *.swo
 .idea
+*.hi
+*.o
