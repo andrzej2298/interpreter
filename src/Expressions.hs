@@ -27,5 +27,8 @@ eval (EMul cur e1 op e2) = do
   n1 <- eval e1
   n2 <- eval e2
   case (n2, op) of
-    (0, (Div _)) -> throwError ("division by zero", cur)
+    (0, (Div _)) -> throwError $ ArithmeticError "division by zero" cur
     _ -> return $ opfun n1 n2
+eval (EApp _ (Ident "print") [e]) = do
+  n <- eval e
+  return n

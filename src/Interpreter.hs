@@ -1,37 +1,40 @@
 module Main where
 
-import System.Environment ( getArgs )
-import System.IO ( readFile )
-import System.Exit ( exitFailure, exitSuccess )
+import System.Environment (getArgs)
+import System.IO (readFile)
+import System.Exit (exitFailure, exitSuccess)
 
--- import AbsGrammar
-import LexGrammar
 import ParGrammar
 import ErrM
 
 import CommonDeclarations
 import TypeChecker
-import Run
+import Statements
 
 
 fromMaybe :: Maybe a -> a
 fromMaybe (Just x) = x
 fromMaybe Nothing = error "parse tree transform error"
 
-parse :: String -> IO CursorProgram
+parse :: Maybe String -> IO CursorProgram
 parse file = do
-  file <- readFile file
-  case pProgram $ myLexer file of
+  contents <- case file of
+    Just f -> readFile f
+    Nothing -> getContents
+  case pProgram $ myLexer contents of
     Bad s -> do
-        putStrLn "failure"
+        printStdErr s
         exitFailure
     Ok tree -> do
-        putStrLn "success"
         return $ fmap fromMaybe tree
+
 
 main :: IO ()
 main = do
-  (file:_) <- getArgs
+  args <- getArgs
+  let file = case args of
+        (s:_) -> Just s
+        [] -> Nothing
   tree <- parse file
   checkTypes tree
   run tree

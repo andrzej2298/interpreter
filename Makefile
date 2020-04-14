@@ -16,7 +16,6 @@ interpreter: src/Interpreter.hs
 		-i build/ParGrammar \
 		-i build/ErrM \
 		-i src/TypeChecker.hs \
-		-i src/Run.hs \
 		-i src/CommonDeclarations.hs \
 		-i src/Expressions.hs \
 		-i src/Statements.hs \

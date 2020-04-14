@@ -6,4 +6,4 @@ import CommonDeclarations
 
 
 checkTypes :: CursorProgram -> IO ()
-checkTypes p = do putStrLn "checking types"
+checkTypes p = return ()
