@@ -1,15 +1,24 @@
-module Expressions (evalExp) where
+module Expressions (eval) where
 
 import Control.Monad.Except
 import Control.Monad.Identity
 import Control.Monad.Reader
 import Control.Monad.State
+import qualified Data.Map as Map
 
 import AbsGrammar
 import CommonDeclarations
 
-evalExp :: Expression -> Environment -> Store -> EvalValue
-evalExp e r s = runIdentity (evalStateT (runExceptT (runReaderT (eval e) r)) s)
+
+getVariableValue :: Cursor -> String -> EvalMonad
+getVariableValue cur x = do
+  s <- get
+  r <- asks variables
+  case do
+    l <- Map.lookup x r
+    Map.lookup l s of
+    Just x -> return x
+    Nothing -> throwError $ undeclaredVariable x cur
 
 eval :: Expression -> EvalMonad
 -- LITERALS
@@ -20,15 +29,23 @@ eval (Neg cur e) = do
   n <- eval e
   case n of
     (VInt v) -> return $ VInt (-v)
-    (v@_) -> throwError $ TypeError ("can't negate value of type " ++
+    v -> throwError $ TypeError ("can't negate value of type " ++
                                      show v) cur
 eval (Not cur e) = do
   b <- eval e
   case b of
     (VBool v) -> return $ VBool (not v)
-    (v@_) -> throwError $ TypeError ("can't negate value of type " ++
+    v -> throwError $ TypeError ("can't negate value of type " ++
                                      show v) cur
 eval (EString _ s) = return $ VString $ filter (/='"') s
+
+
+eval (EVar cur (Ident x)) = getVariableValue cur x
+eval (EApp cur (Ident fn) args) = do
+  r <- asks functions
+  case Map.lookup fn r of
+    Just f -> f []
+    Nothing -> throwError $ undeclaredFunction fn cur
 -- ARITHMETIC OPERATIONS
 eval (EAdd cur e1 op e2) = do
   let opfun = case op of
@@ -72,7 +89,7 @@ eval (ERel cur e1 op e2) = do
     _ -> throwError $ TypeError ("can't compare " ++ show f1 ++
                                          " and " ++ show f2) cur
 
-  
+
 eval (EAnd cur e1 e2) = do
   b1 <- eval e1
   b2 <- eval e2
@@ -87,3 +104,5 @@ eval (EOr cur e1 e2) = do
     (VBool v1, VBool v2) -> return $ VBool $ v1 || v2
     (f1, f2) -> throwError $ TypeError ("can't perform alterative of " ++
                                         show f1 ++ " and " ++ show f2) cur
+
+eval other = error $ show other
