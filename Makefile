@@ -1,4 +1,4 @@
-all: grammar interpreter
+all: src/Interpreter
 
 grammar: Grammar.cf
 	rm -f build/*
@@ -8,8 +8,9 @@ grammar: Grammar.cf
 		&& make \
 		&& happy -gca --info=bad.txt ParGrammar.y)
 
-interpreter: src/Interpreter.hs
+src/Interpreter: src/*.hs
 	ghc src/Interpreter.hs \
+		-Wall -Wincomplete-patterns\
 		-package mtl \
 		-i build/AbsGrammar \
 		-i build/LexGrammar \

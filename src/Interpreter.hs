@@ -18,15 +18,12 @@ fromMaybe Nothing = error "parse tree transform error"
 
 parse :: Maybe String -> IO CursorProgram
 parse file = do
-  contents <- case file of
-    Just f -> readFile f
-    Nothing -> getContents
+  contents <- maybe getContents readFile file
   case pProgram $ myLexer contents of
     Bad s -> do
         printStdErr s
         exitFailure
-    Ok tree -> do
-        return $ fmap fromMaybe tree
+    Ok tree -> return $ fmap fromMaybe tree
 
 
 main :: IO ()
@@ -39,4 +36,3 @@ main = do
   checkTypes tree
   run tree
   exitSuccess
-

@@ -1,6 +1,5 @@
 module CommonDeclarations where
 
-import System.Exit (exitFailure, exitSuccess)
 import System.IO (hPutStrLn, stderr)
 import Control.Monad.Except
 import Control.Monad.Identity
@@ -17,13 +16,23 @@ type CursorProgram = Program Cursor
 
 type Variable = String
 type Location = Integer
-type Value = Integer
-data Error = ArithmeticError String Cursor
+
+data Value = VInt Integer | VBool Bool | VString String
+instance Show Value where
+  show (VInt _) = "Integer"
+  show (VBool _) = "Bool"
+  show (VString _) = "String"
+
+data Error =
+  ArithmeticError String Cursor |
+  TypeError String Cursor
 
 type Environment = Map.Map Variable Location
 type Store = Map.Map Location Value
 
-emptyEnvironment = Map.empty :: Environment
+emptyEnvironment :: Environment
+emptyEnvironment = Map.empty
+emptyStore :: Store
 emptyStore = Map.empty :: Store
 
 type EvalValue = Either Error Value
@@ -33,10 +42,14 @@ type EvalMonad = ReaderT Environment (ExceptT Error
 type ExecMonad = ReaderT Environment (ExceptT Error
                                       (StateT Store IO)) ()
 
+formatError' :: String -> String -> Cursor -> String
+formatError' e s (l, c) = concat [e, " at line ",
+                                  show l, ", column ",
+                                  show c, ": ", s]
+
 formatError :: Error -> String
-formatError (ArithmeticError s (l, c)) = concat ["error at line ",
-                                                 show l, ", column ",
-                                                 show c, ": ", s]
+formatError (ArithmeticError s c) = formatError' "ArithmeticError" s c
+formatError (TypeError s c) = formatError' "TypeError" s c
 
 printError :: Error -> IO ()
 printError = printStdErr . formatError
