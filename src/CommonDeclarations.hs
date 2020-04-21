@@ -18,7 +18,7 @@ type FunctionName = String
 type Location = Int
 
 data Value = VInt Integer | VBool Bool | VString String
-type Function = [Value] -> EvalMonad
+type Function = [Expression] -> EvalMonad
 
 defaultValue :: Type Cursor -> Value
 defaultValue (Int _) = VInt 0
@@ -35,7 +35,12 @@ data Error =
   TypeError String Cursor |
   NameError String Cursor
 
-data Environment = Environment { functions :: FunctionEnvironment, variables :: VariableEnvironment }
+data Environment = Environment {
+  functions :: FunctionEnvironment,
+  variables :: VariableEnvironment
+  }
+-- instance Show Environment where
+--   show e = show (Map.keys $ functions e) ++ " " ++ show (Map.keys $ variables e)
 type VariableEnvironment = Map.Map VariableName Location
 type FunctionEnvironment = Map.Map FunctionName Function
 type Store = Map.Map Location Value
@@ -44,6 +49,8 @@ emptyEnvironment :: Environment
 emptyEnvironment = Environment { functions = Map.empty, variables = Map.empty }
 declareVariable :: VariableName -> Location -> Environment -> Environment
 declareVariable x l env = env { variables = Map.insert x l (variables env) }
+declareVariables :: [VariableName] -> [Location] -> Environment -> Environment
+declareVariables xs ls env = env { variables = insertManyValues xs ls (variables env) }
 declareFunction :: FunctionName -> Function -> Environment -> Environment
 declareFunction fn f env = env { functions = Map.insert fn f (functions env) }
 emptyStore :: Store
@@ -69,9 +76,9 @@ formatError (ArithmeticError s c) = formatError' "ArithmeticError" s c
 formatError (TypeError s c) = formatError' "TypeError" s c
 formatError (NameError s c) = formatError' "NameError" s c
 
-undeclaredVariable :: String -> Cursor -> Error
+undeclaredVariable :: VariableName -> Cursor -> Error
 undeclaredVariable x = NameError ("variable " ++ x ++ " might not have been declared")
-undeclaredFunction :: String -> Cursor -> Error
+undeclaredFunction :: FunctionName -> Cursor -> Error
 undeclaredFunction fn = NameError ("function " ++ fn ++ " might not have been declared")
 
 printError :: Error -> IO ()
@@ -79,3 +86,8 @@ printError = printStdErr . formatError
 
 printStdErr :: String -> IO ()
 printStdErr = hPutStrLn stderr
+
+insertManyValues :: Ord a => [a] -> [b] -> Map.Map a b -> Map.Map a b
+insertManyValues keys values map = foldr addOneValue map pairs where
+  addOneValue (k, v) = Map.insert k v
+  pairs = zip keys values

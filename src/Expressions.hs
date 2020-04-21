@@ -1,7 +1,6 @@
 module Expressions (eval) where
 
 import Control.Monad.Except
-import Control.Monad.Identity
 import Control.Monad.Reader
 import Control.Monad.State
 import qualified Data.Map as Map
@@ -17,7 +16,7 @@ getVariableValue cur x = do
   case do
     l <- Map.lookup x r
     Map.lookup l s of
-    Just x -> return x
+    Just v -> return v
     Nothing -> throwError $ undeclaredVariable x cur
 
 eval :: Expression -> EvalMonad
@@ -44,7 +43,7 @@ eval (EVar cur (Ident x)) = getVariableValue cur x
 eval (EApp cur (Ident fn) args) = do
   r <- asks functions
   case Map.lookup fn r of
-    Just f -> f []
+    Just f -> f args
     Nothing -> throwError $ undeclaredFunction fn cur
 -- ARITHMETIC OPERATIONS
 eval (EAdd cur e1 op e2) = do

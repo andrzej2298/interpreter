@@ -43,6 +43,8 @@ exec (Sequence ((FnDef _ fnType (Ident fnName) args (Block _ body)):rest)) =
 exec (Sequence (i:is)) = do
   exec i
   exec (Sequence is)
+exec (Ret _ e) = liftIO $ putStrLn "return"
+exec (VRet _) = liftIO $ putStrLn "void return"
 exec d@VarDecl{} = exec (Sequence [d])  -- no instructions are after this variable declaration
 exec d@FnDef{} = exec (Sequence [d])  -- no instructions are after this function declaration
 exec (Assign cur (Ident x) e) = do
@@ -73,6 +75,7 @@ exec while@(While cur1 e (Block cur2 is)) = exec (CondElse cur1 e
 
 declareVariablesAndExecuteRest :: Type Cursor -> [Item Cursor] -> Statement -> ExecMonad
 declareVariablesAndExecuteRest varType items followingInstructions = go items where
+  -- TODO rewrite with fold
   go [] = exec followingInstructions
   go ((Init _ (Ident x) e):rest) = do
     v <- eval e
@@ -89,8 +92,33 @@ declareVariablesAndExecuteRest varType items followingInstructions = go items wh
     put s'
     local (declareVariable x l) (go rest)
 
+
 declareFunctionAndExecuteRest :: Type Cursor -> FunctionName -> [Arg Cursor] -> Statement -> Statement -> ExecMonad
-declareFunctionAndExecuteRest fnType fnName args body rest =
-  local (declareFunction fnName f) (exec rest) where
+declareFunctionAndExecuteRest fnType fnName args body rest = do
+  r <- ask
+  let
+    getName :: Arg Cursor -> FunctionName
+    getName (ArgVal _ _ (Ident fn)) = error "no support for pass by value yet"
+    getName (ArgRef _ _ (Ident fn)) = fn
+    argNames :: [FunctionName]
+    argNames = map getName args
+    getEnvironment :: VariableEnvironment -> [Expression] -> Environment
+    getEnvironment rOfApplication expressions =
+      declareFunction fnName f (declareVariables argNames argLocations r) where
+      argLocations :: [Location]
+      argLocations = map (getLocationFromArgument rOfApplication) expressions
+      getLocationFromArgument :: VariableEnvironment -> Expression -> Location
+      getLocationFromArgument rOfApplication (EVar cur (Ident x)) =
+        case Map.lookup x rOfApplication of
+          Just l -> l
+          Nothing -> error "undeclared variable"
+      getLocationFromArgument _ _ = error "undeclared variable"
     f :: Function
-    f _ = return (VInt 1)
+    f expressions = do
+      rOfApplication <- asks variables
+      let env = getEnvironment rOfApplication expressions
+      -- liftIO $ print argNames
+      -- liftIO $ print env
+      local (const env) (exec body)
+      return (VInt 1)
+  local (declareFunction fnName f) (exec rest)
