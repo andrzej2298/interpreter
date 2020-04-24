@@ -15,10 +15,13 @@ type CursorProgram = Program Cursor
 
 type VariableName = String
 type FunctionName = String
+data ControlParameter = Return | Break | Continue
+  deriving (Eq, Ord, Show)
 type Location = Int
 
-data Value = VInt Integer | VBool Bool | VString String
+data Value = VInt Integer | VBool Bool | VString String | VoidValue
 type Function = [Expression] -> EvalMonad
+data ControlValue = ReturnValue (Maybe Value) | Flag Bool
 
 defaultValue :: Type Cursor -> Value
 defaultValue (Int _) = VInt 0
@@ -37,32 +40,52 @@ data Error =
 
 data Environment = Environment {
   functions :: FunctionEnvironment,
-  variables :: VariableEnvironment
-  }
--- instance Show Environment where
---   show e = show (Map.keys $ functions e) ++ " " ++ show (Map.keys $ variables e)
+  variables :: VariableEnvironment,
+  control :: ControlEnvironment
+}
+instance Show Environment where
+  show e = show (Map.keys $ functions e) ++ " " ++ show (Map.keys $ variables e) ++
+    " " ++ show (Map.keys $ control e)
 type VariableEnvironment = Map.Map VariableName Location
 type FunctionEnvironment = Map.Map FunctionName Function
-type Store = Map.Map Location Value
+type ControlEnvironment = Map.Map ControlParameter Location
+
+data Store = Store {
+  values :: VariableStore,
+  controlValues :: ControlStore
+}
+
+type VariableStore = Map.Map Location Value
+type ControlStore = Map.Map Location ControlValue
 
 emptyEnvironment :: Environment
-emptyEnvironment = Environment { functions = Map.empty, variables = Map.empty }
+emptyEnvironment = Environment { functions = Map.empty, variables = Map.empty, control = Map.empty }
 declareVariable :: VariableName -> Location -> Environment -> Environment
 declareVariable x l env = env { variables = Map.insert x l (variables env) }
 declareVariables :: [VariableName] -> [Location] -> Environment -> Environment
 declareVariables xs ls env = env { variables = insertManyValues xs ls (variables env) }
 declareFunction :: FunctionName -> Function -> Environment -> Environment
 declareFunction fn f env = env { functions = Map.insert fn f (functions env) }
-emptyStore :: Store
-emptyStore = Map.empty :: Store
+declareReturnValue :: Location -> Environment -> Environment
+declareReturnValue l env = env { control = Map.insert Return l (control env) }
 
-alloc :: Store -> Location
+emptyStore :: Store
+emptyStore = Store {
+  values = Map.empty,
+  controlValues = Map.empty
+}
+modifyVariableStore :: VariableStore -> Store -> Store
+modifyVariableStore s' st = st { values = s' }
+modifyControlStore :: ControlStore -> Store -> Store
+modifyControlStore s' st = st { controlValues = s' }
+
+alloc :: Map.Map k v -> Location
 alloc = Map.size
 
 type EvalValue = Either Error Value
 type ExecValue = IO (Either Error ())
 type InterpreterMonad a = ReaderT Environment (ExceptT Error
-                                      (StateT Store IO)) a
+                                               (StateT Store IO)) a
 type EvalMonad = InterpreterMonad Value
 type ExecMonad = InterpreterMonad ()
 
@@ -91,3 +114,24 @@ insertManyValues :: Ord a => [a] -> [b] -> Map.Map a b -> Map.Map a b
 insertManyValues keys values map = foldr addOneValue map pairs where
   addOneValue (k, v) = Map.insert k v
   pairs = zip keys values
+
+getCursor :: Expression -> Cursor
+getCursor e =
+  case e of
+    EVar c _ -> c
+    EItemInd c _ _ -> c
+    EArrExp c _ -> c
+    EArrDef c _ _ -> c
+    ETupLit c _ -> c
+    ELitInt c _ -> c
+    ELitTrue c -> c
+    ELitFalse c -> c
+    EApp c _ _ -> c
+    EString c _ -> c
+    Neg c _ -> c
+    Not c _ -> c
+    EMul c _ _ _ -> c
+    EAdd c _ _ _ -> c
+    ERel c _ _ _ -> c
+    EAnd c _ _ -> c
+    EOr c _ _ -> c

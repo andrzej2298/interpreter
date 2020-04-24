@@ -16,13 +16,6 @@ int x = -1;
 print(constant());
 procedure();
 
-// void infinite() {
-// 	print("infinite");
-// 	infinite();
-// }
-//
-// infinite();
-
 print("here");
 
 int range(int &i, int &n) {
@@ -32,11 +25,33 @@ int range(int &i, int &n) {
 	range(i, n);
     }
     else {}
+    return 1;
 }
 
 int i = 0;
-int n = 10;
+int n = 3;
 range(i, n);
 print("after function");
 print(i);
 print(n);
+
+print("return");
+
+int f() {
+	return 42;
+	return 43;
+}
+
+print(f());
+
+int fact(int n) {
+	if (n <= 0) {
+		return 1;
+	}
+	else {
+		return n * fact(n - 1);
+	}
+}
+
+print("fact of 5:");
+print(fact(5));

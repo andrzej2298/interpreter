@@ -11,7 +11,7 @@ import CommonDeclarations
 
 getVariableValue :: Cursor -> String -> EvalMonad
 getVariableValue cur x = do
-  s <- get
+  s <- gets values
   r <- asks variables
   case do
     l <- Map.lookup x r

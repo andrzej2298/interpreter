@@ -1,26 +1,19 @@
 
 // NESTED FUNCTION DECLARATIONS
 // e() == 0
-print ("abc");
-
 int e() {
     int x = 0;
-    print("e");
-    print(x);
 
     int f() {
-        print("f");
-        print(x);
+	return x;
     }
 
     int g() {
-        int x = 1;
-        f();
-    	print("g");
-        print(x);
+	int x = 1;
+	return f();
     }
 
-    g();
+    return g();
 }
 
-e();
+print(e());
