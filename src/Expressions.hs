@@ -4,12 +4,13 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
 import qualified Data.Map as Map
+import qualified Data.Vector as Vector
 
 import AbsGrammar
 import CommonDeclarations
 
 
-getVariableValue :: Cursor -> String -> EvalMonad
+getVariableValue :: Cursor -> VariableName -> EvalMonad
 getVariableValue cur x = do
   s <- gets values
   r <- asks variables
@@ -30,6 +31,22 @@ eval (Neg cur e) = do
     (VInt v) -> return $ VInt (-v)
     v -> throwError $ TypeError ("can't negate value of type " ++
                                      show v) cur
+
+eval (EArrDef cur t e) = do
+  n <- eval e
+  let
+    err = throwError $ TypeError "array size must be a non-negative integer" cur
+    arrayOfDefaults v = VArray t (Vector.replicate (fromInteger v) (defaultValue t))
+  case n of
+    (VInt v) -> if v >= 0 then return $ arrayOfDefaults v else err
+    _ -> err
+eval (EArrExp cur []) = throwError $ TypeError "explicitly defined array can't be empty" cur
+eval (EArrExp _ exprs) = do
+  vals <- mapM eval exprs
+  let t = getType $ head vals
+  return $ VArray t (Vector.fromList vals)
+
+
 eval (Not cur e) = do
   b <- eval e
   case b of
@@ -37,14 +54,22 @@ eval (Not cur e) = do
     v -> throwError $ TypeError ("can't negate value of type " ++
                                      show v) cur
 eval (EString _ s) = return $ VString $ filter (/='"') s
-
-
 eval (EVar cur (Ident x)) = getVariableValue cur x
-eval (EApp cur (Ident fn) args) = do
-  r <- asks functions
-  case Map.lookup fn r of
-    Just f -> f args
-    Nothing -> throwError $ undeclaredFunction fn cur
+
+eval (EApp cur (Ident fn) args) =
+  case fn of
+    "len" -> getArrayLength cur args
+    userFunction -> applyFunction userFunction cur args
+
+eval (EItemInd cur (Ident x) e) = do
+  arr <- getVariableValue cur x
+  n <- eval e
+  case (n, arr) of
+    (VInt v, VArray _ vec) -> case vec Vector.!? fromInteger v of
+      Just res -> return res
+      Nothing -> throwError $ RuntimeError "array index out of bounds" cur
+    (_, VArray{}) -> throwError $ TypeError "array index must be an integer" cur
+    _ -> throwError $ TypeError (x ++ " is not an array") cur
 -- ARITHMETIC OPERATIONS
 eval (EAdd cur e1 op e2) = do
   let opfun = case op of
@@ -88,7 +113,6 @@ eval (ERel cur e1 op e2) = do
     _ -> throwError $ TypeError ("can't compare " ++ show f1 ++
                                          " and " ++ show f2) cur
 
-
 eval (EAnd cur e1 e2) = do
   b1 <- eval e1
   b2 <- eval e2
@@ -105,3 +129,21 @@ eval (EOr cur e1 e2) = do
                                         show f1 ++ " and " ++ show f2) cur
 
 eval other = error $ show other
+
+applyFunction :: FunctionName -> Cursor -> [Expression] -> EvalMonad
+applyFunction fn cur args = do
+  r <- asks functions
+  case Map.lookup fn r of
+    Just f -> f args
+    Nothing -> throwError $ undeclaredFunction fn cur
+
+
+arrayError :: Cursor -> Error
+arrayError = TypeError "can only check length of a single array"
+getArrayLength :: Cursor -> [Expression] -> EvalMonad
+getArrayLength cur [EVar _ (Ident a)] = do
+  arr <- getVariableValue cur a
+  case arr of
+    (VArray _ vec) -> return (VInt (toInteger (length vec)))
+    _ -> throwError $ arrayError cur
+getArrayLength cur _ = throwError $ arrayError cur

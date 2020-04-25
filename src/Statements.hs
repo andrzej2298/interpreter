@@ -4,8 +4,8 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.Foldable
-import Data.Char
 import qualified Data.Map as Map
+import qualified Data.Vector as Vector
 
 import AbsGrammar
 import CommonDeclarations
@@ -61,12 +61,21 @@ exec (Assign cur (Ident x) e) = do
   case optLoc of
     Just l -> modify (modifyVariableStore $ Map.insert l v s)
     Nothing -> throwError $ undeclaredVariable x cur
+exec (IndAssign cur (Ident a) index e) = do
+  valueToAssign <- eval e
+  i <- eval index
+  arr <- eval (EVar cur (Ident a))
+  case (i, arr) of
+    (VInt v, VArray t vec) -> do
+      let newVec = Vector.update vec (Vector.singleton (fromInteger v, valueToAssign))
+      assignValueToVariable (VArray t newVec) a cur
+    (_, VArray{}) -> throwError $ TypeError "array index must be an integer" cur
+    _ -> throwError $ TypeError (a ++ " is not an array") cur
 exec (Incr cur ident) = exec (Assign cur ident (EAdd cur (EVar cur ident) (Plus cur) (ELitInt cur 1)))
 exec (Decr cur ident) = exec (Assign cur ident (EAdd cur (EVar cur ident) (Minus cur) (ELitInt cur 1)))
 exec (Print _ e) = processExpValue e printValue where
-  printValue (VInt n) = liftIO $ print n
   printValue (VString s) = liftIO $ putStrLn s
-  printValue (VBool b) = liftIO $ putStrLn $ map toLower (show b)
+  printValue v = liftIO $ putStrLn $ show v
 exec (SExp _ e) = processExpValue e (const $ return ())
 exec (CondElse cur e caseTrue caseFalse) = do
   b <- eval e
@@ -145,7 +154,16 @@ getEnvironmentWithActualArgs formalArgs actualArgs variableEnvOfApplication rOfD
       let l = alloc s'
       val <- eval e
       return (l:locs, Map.insert l val s')
-    generateSingleLocation (ArgRef{}, e) _ = throwError $ TypeError "" (getCursor e)
+    generateSingleLocation (ArgRef{}, e) _ = throwError $ TypeError "argument passed by reference must be a variable" (getCursor e)
   (argLocations, s') <- foldrM generateSingleLocation ([], s) (zip formalArgs actualArgs)
   modify (modifyVariableStore s')
   return $ declareVariables argNames argLocations rOfDeclaration
+
+assignValueToVariable :: Value -> VariableName -> Cursor -> ExecMonad
+assignValueToVariable v x cur = do
+  s <- gets values
+  r <- asks variables
+  let optLoc = Map.lookup x r
+  case optLoc of
+    Just l -> modify (modifyVariableStore $ Map.insert l v s)
+    Nothing -> throwError $ undeclaredVariable x cur

@@ -12,6 +12,7 @@ src/Interpreter: src/*.hs
 	ghc src/Interpreter.hs \
 		-Wall -Wincomplete-patterns\
 		-package mtl \
+		-package vector \
 		-i build/AbsGrammar \
 		-i build/LexGrammar \
 		-i build/ParGrammar \

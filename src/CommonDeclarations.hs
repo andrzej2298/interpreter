@@ -4,7 +4,10 @@ import System.IO (hPutStrLn, stderr)
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
+import Data.Char
+import Data.List
 import qualified Data.Map as Map
+import qualified Data.Vector as Vector
 
 import AbsGrammar
 
@@ -19,24 +22,40 @@ data ControlParameter = Return | Break | Continue
   deriving (Eq, Ord, Show)
 type Location = Int
 
-data Value = VInt Integer | VBool Bool | VString String | VoidValue
+data Value = VInt Integer | VBool Bool | VString String | VoidValue | VArray (Type Cursor) (Vector.Vector Value)
 type Function = [Expression] -> EvalMonad
 data ControlValue = ReturnValue (Maybe Value) | Flag Bool
 
-defaultValue :: Type Cursor -> Value
+dummyCursor = (0, 0)
+getType :: Value -> Type Cursor
+getType (VInt _) = Int dummyCursor
+getType (VBool _) = Bool dummyCursor
+getType (VString _) = Str dummyCursor
+getType (VArray t _) = Array dummyCursor t
+
+defaultValue :: Type a -> Value
 defaultValue (Int _) = VInt 0
 defaultValue (Str _) = VString ""
 defaultValue (Bool _) = VBool False
 
 instance Show Value where
-  show (VInt _) = "Integer"
-  show (VBool _) = "Bool"
-  show (VString _) = "String"
+  show v = showsValue v "" where
+    showsValue (VInt i) = shows i
+    showsValue (VBool b) = showString $ map toLower (show b)
+    showsValue (VString s) = showString "\"" . showString s . showString "\""
+    showsValue (VArray _ vec) = showString "[" . showString (intercalate ", " $ map show (Vector.toList vec)) . showString "]"
+
+showValueType :: Value -> String
+showValueType = show . getType
+  -- show (VInt _) = "Integer"
+  -- show (VBool _) = "Bool"
+  -- show (VString _) = "String"
 
 data Error =
   ArithmeticError String Cursor |
   TypeError String Cursor |
-  NameError String Cursor
+  NameError String Cursor |
+  RuntimeError String Cursor
 
 data Environment = Environment {
   functions :: FunctionEnvironment,
@@ -98,6 +117,7 @@ formatError :: Error -> String
 formatError (ArithmeticError s c) = formatError' "ArithmeticError" s c
 formatError (TypeError s c) = formatError' "TypeError" s c
 formatError (NameError s c) = formatError' "NameError" s c
+formatError (RuntimeError s c) = formatError' "RuntimeError" s c
 
 undeclaredVariable :: VariableName -> Cursor -> Error
 undeclaredVariable x = NameError ("variable " ++ x ++ " might not have been declared")
