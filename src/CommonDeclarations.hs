@@ -18,13 +18,21 @@ type CursorProgram = Program Cursor
 
 type VariableName = String
 type FunctionName = String
-data ControlParameter = Return | Break | Continue
+data ControlParameter = ReturnParameter | BreakParameter | ContinueParameter
   deriving (Eq, Ord, Show)
 type Location = Int
 
-data Value = VInt Integer | VBool Bool | VString String | VoidValue | VArray (Type Cursor) (Vector.Vector Value)
+data Value =
+  VInt Integer |
+  VBool Bool |
+  VString String |
+  VoidValue |
+  VArray (Type Cursor) (Vector.Vector Value)
+  -- VTuple
+
 type Function = [Expression] -> EvalMonad
 data ControlValue = ReturnValue (Maybe Value) | Flag Bool
+  deriving (Show)
 
 dummyCursor = (0, 0)
 getType :: Value -> Type Cursor
@@ -32,11 +40,13 @@ getType (VInt _) = Int dummyCursor
 getType (VBool _) = Bool dummyCursor
 getType (VString _) = Str dummyCursor
 getType (VArray t _) = Array dummyCursor t
+getType VoidValue = Void dummyCursor
 
 defaultValue :: Type a -> Value
 defaultValue (Int _) = VInt 0
 defaultValue (Str _) = VString ""
 defaultValue (Bool _) = VBool False
+defaultValue (Void _) = VoidValue
 
 instance Show Value where
   show v = showsValue v "" where
@@ -44,12 +54,10 @@ instance Show Value where
     showsValue (VBool b) = showString $ map toLower (show b)
     showsValue (VString s) = showString "\"" . showString s . showString "\""
     showsValue (VArray _ vec) = showString "[" . showString (intercalate ", " $ map show (Vector.toList vec)) . showString "]"
+    showsValue VoidValue = showString "void"
 
 showValueType :: Value -> String
 showValueType = show . getType
-  -- show (VInt _) = "Integer"
-  -- show (VBool _) = "Bool"
-  -- show (VString _) = "String"
 
 data Error =
   ArithmeticError String Cursor |
@@ -85,8 +93,10 @@ declareVariables :: [VariableName] -> [Location] -> Environment -> Environment
 declareVariables xs ls env = env { variables = insertManyValues xs ls (variables env) }
 declareFunction :: FunctionName -> Function -> Environment -> Environment
 declareFunction fn f env = env { functions = Map.insert fn f (functions env) }
-declareReturnValue :: Location -> Environment -> Environment
-declareReturnValue l env = env { control = Map.insert Return l (control env) }
+declareControlValue :: ControlParameter -> Location -> Environment -> Environment
+declareControlValue p l env = env { control = Map.insert p l (control env) }
+declareControlValues :: [ControlParameter] -> [Location] -> Environment -> Environment
+declareControlValues ps ls env = env { control = insertManyValues ps ls (control env) }
 
 emptyStore :: Store
 emptyStore = Store {

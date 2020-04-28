@@ -55,3 +55,26 @@ int fact(int n) {
 
 print("fact of 5:");
 print(fact(5));
+
+int double_return() {
+	return 0;
+	return 1;
+}
+
+print(double_return());
+
+int fancy_double_return() {
+	if (false) {
+		return 0;
+	}
+	else {
+		if (true) {
+			return 1;
+		}
+		else {
+			return 2;
+		}
+	}
+}
+print("fancy double return");
+print(fancy_double_return());

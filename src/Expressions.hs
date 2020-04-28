@@ -10,15 +10,6 @@ import AbsGrammar
 import CommonDeclarations
 
 
-getVariableValue :: Cursor -> VariableName -> EvalMonad
-getVariableValue cur x = do
-  s <- gets values
-  r <- asks variables
-  case do
-    l <- Map.lookup x r
-    Map.lookup l s of
-    Just v -> return v
-    Nothing -> throwError $ undeclaredVariable x cur
 
 eval :: Expression -> EvalMonad
 -- LITERALS
@@ -31,7 +22,6 @@ eval (Neg cur e) = do
     (VInt v) -> return $ VInt (-v)
     v -> throwError $ TypeError ("can't negate value of type " ++
                                      show v) cur
-
 eval (EArrDef cur t e) = do
   n <- eval e
   let
@@ -45,8 +35,6 @@ eval (EArrExp _ exprs) = do
   vals <- mapM eval exprs
   let t = getType $ head vals
   return $ VArray t (Vector.fromList vals)
-
-
 eval (Not cur e) = do
   b <- eval e
   case b of
@@ -55,12 +43,10 @@ eval (Not cur e) = do
                                      show v) cur
 eval (EString _ s) = return $ VString $ filter (/='"') s
 eval (EVar cur (Ident x)) = getVariableValue cur x
-
 eval (EApp cur (Ident fn) args) =
   case fn of
     "len" -> getArrayLength cur args
     userFunction -> applyFunction userFunction cur args
-
 eval (EItemInd cur (Ident x) e) = do
   arr <- getVariableValue cur x
   n <- eval e
@@ -112,7 +98,6 @@ eval (ERel cur e1 op e2) = do
     (VString v1, VString v2, NEQ _) -> return $ VBool $ v1 /= v2
     _ -> throwError $ TypeError ("can't compare " ++ show f1 ++
                                          " and " ++ show f2) cur
-
 eval (EAnd cur e1 e2) = do
   b1 <- eval e1
   b2 <- eval e2
@@ -127,7 +112,6 @@ eval (EOr cur e1 e2) = do
     (VBool v1, VBool v2) -> return $ VBool $ v1 || v2
     (f1, f2) -> throwError $ TypeError ("can't perform alterative of " ++
                                         show f1 ++ " and " ++ show f2) cur
-
 eval other = error $ show other
 
 applyFunction :: FunctionName -> Cursor -> [Expression] -> EvalMonad
@@ -136,7 +120,6 @@ applyFunction fn cur args = do
   case Map.lookup fn r of
     Just f -> f args
     Nothing -> throwError $ undeclaredFunction fn cur
-
 
 arrayError :: Cursor -> Error
 arrayError = TypeError "can only check length of a single array"
@@ -147,3 +130,18 @@ getArrayLength cur [EVar _ (Ident a)] = do
     (VArray _ vec) -> return (VInt (toInteger (length vec)))
     _ -> throwError $ arrayError cur
 getArrayLength cur _ = throwError $ arrayError cur
+
+maybeGetVariableValue :: VariableName -> InterpreterMonad (Maybe Value)
+maybeGetVariableValue x = do
+  s <- gets values
+  r <- asks variables
+  return $ do
+    l <- Map.lookup x r
+    Map.lookup l s
+
+getVariableValue :: Cursor -> VariableName -> EvalMonad
+getVariableValue cur x = do
+  maybeValue <- maybeGetVariableValue x
+  case maybeValue of
+    Just v -> return v
+    Nothing -> throwError $ undeclaredVariable x cur
