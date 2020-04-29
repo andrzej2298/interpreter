@@ -26,3 +26,4 @@ src/Interpreter: src/*.hs
 clean:
 	rm src/*.hi
 	rm src/*.o
+	rm build/Interpreter

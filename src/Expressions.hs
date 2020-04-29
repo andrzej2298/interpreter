@@ -16,12 +16,15 @@ eval :: Expression -> EvalMonad
 eval (ELitInt _ n) = return $ VInt n
 eval (ELitTrue _) = return $ VBool True
 eval (ELitFalse _) = return $ VBool False
+eval (ETupLit _ exprs) = do
+  vals <- mapM eval exprs
+  return $ VTuple $ Vector.fromList vals
 eval (Neg cur e) = do
   n <- eval e
   case n of
     (VInt v) -> return $ VInt (-v)
     v -> throwError $ TypeError ("can't negate value of type " ++
-                                     show v) cur
+                                 show v) cur
 eval (EArrDef cur t e) = do
   n <- eval e
   let
@@ -50,12 +53,17 @@ eval (EApp cur (Ident fn) args) =
 eval (EItemInd cur (Ident x) e) = do
   arr <- getVariableValue cur x
   n <- eval e
-  case (n, arr) of
-    (VInt v, VArray _ vec) -> case vec Vector.!? fromInteger v of
+  let
+    indexLookup :: Vector.Vector Value -> Integer -> EvalMonad
+    indexLookup vec v = case vec Vector.!? fromInteger v of
       Just res -> return res
       Nothing -> throwError $ RuntimeError "array index out of bounds" cur
+  case (n, arr) of
+    (VInt v, VArray _ vec) -> indexLookup vec v
+    (VInt v, VTuple vec) -> indexLookup vec v
     (_, VArray{}) -> throwError $ TypeError "array index must be an integer" cur
-    _ -> throwError $ TypeError (x ++ " is not an array") cur
+    (_, VTuple{}) -> throwError $ TypeError "tuple index must be an integer" cur
+    _ -> throwError $ TypeError (x ++ " is not an array or tuple") cur
 -- ARITHMETIC OPERATIONS
 eval (EAdd cur e1 op e2) = do
   let opfun = case op of
@@ -112,7 +120,6 @@ eval (EOr cur e1 e2) = do
     (VBool v1, VBool v2) -> return $ VBool $ v1 || v2
     (f1, f2) -> throwError $ TypeError ("can't perform alterative of " ++
                                         show f1 ++ " and " ++ show f2) cur
-eval other = error $ show other
 
 applyFunction :: FunctionName -> Cursor -> [Expression] -> EvalMonad
 applyFunction fn cur args = do

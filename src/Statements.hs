@@ -42,7 +42,6 @@ exec e = do
   returnWasCalled <- getControlValue ReturnParameter
   breakWasCalled <- getControlValue BreakParameter
   continueWasCalled <- getControlValue ContinueParameter
-  s <- gets controlValues
   let execute = not (returnWasCalled || breakWasCalled || continueWasCalled)
   if execute then internalExec e else return ()
 
@@ -57,6 +56,9 @@ internalExec (Sequence (i:is)) = do
   exec i
   exec (Sequence is)
 
+{---------------------------------------------------------
+                    JUMP STATEMENTS
+----------------------------------------------------------}
 internalExec (Ret _ e) = do
   v <- eval e
   setControlValue ReturnParameter (ReturnValue (Just v))
@@ -67,14 +69,12 @@ internalExec (Continue _) = setControlValue ContinueParameter (Flag True)
 internalExec d@VarDecl{} = exec (Sequence [d])  -- no instructions are after this variable declaration
 internalExec d@FnDef{} = exec (Sequence [d])  -- no instructions are after this function declaration
 
+{---------------------------------------------------------
+                    ASSIGNMENT STATEMENTS
+----------------------------------------------------------}
 internalExec (Assign cur (Ident x) e) = do
-  s <- gets values
-  r <- asks variables
   v <- eval e
-  let optLoc = Map.lookup x r
-  case optLoc of
-    Just l -> modify (modifyVariableStore $ Map.insert l v s)
-    Nothing -> throwError $ undeclaredVariable x cur
+  assignValueToVariable v x cur
 internalExec (IndAssign cur (Ident a) index e) = do
   valueToAssign <- eval e
   i <- eval index
@@ -85,6 +85,18 @@ internalExec (IndAssign cur (Ident a) index e) = do
       assignValueToVariable (VArray t newVec) a cur
     (_, VArray{}) -> throwError $ TypeError "array index must be an integer" cur
     _ -> throwError $ TypeError (a ++ " is not an array") cur
+internalExec (TupTie cur tievars e) = do
+  v <- eval e
+  let
+    assignOne :: (TieVar Cursor, Value) -> ExecMonad
+    assignOne (TieIgnore _, _) = return ()
+    assignOne (TieVar tCur (Ident x), val) = assignValueToVariable val x tCur
+    assignOne (TieVars tCur xs, val) = case val of
+      (VTuple vals) -> mapM_ assignOne (zip xs (Vector.toList vals))
+      _ -> throwError $ TypeError "can tie only a tuple" tCur
+  case v of
+    (VTuple vals) -> mapM_ assignOne (zip tievars (Vector.toList vals))
+    _ -> throwError $ TypeError "can tie only a tuple" cur
 internalExec (Incr cur ident) = exec (Assign cur ident (EAdd cur (EVar cur ident) (Plus cur) (ELitInt cur 1)))
 internalExec (Decr cur ident) = exec (Assign cur ident (EAdd cur (EVar cur ident) (Minus cur) (ELitInt cur 1)))
 
@@ -110,13 +122,14 @@ internalExec (While _ e body) = do
   r <- ask
   let
     l = alloc s
-    generateSingleLocation val (locs, s') = let l = alloc s' in (l:locs, Map.insert l val s')
+    generateSingleLocation val (locs, currentS) = let newLoc = alloc currentS in (l:locs, Map.insert newLoc val currentS)
     -- initially set break and continue flags to false
     ([breakLoc, continueLoc], s') = foldr generateSingleLocation ([], s) [Flag False, Flag False]
     newEnv = declareControlValues [BreakParameter, ContinueParameter] [breakLoc, continueLoc] r
   modify (modifyControlStore s')
   whileLoop e body newEnv breakLoc continueLoc
 
+whileLoop :: Expression -> Block Cursor -> Environment -> Location -> Location -> ExecMonad
 whileLoop e body whileEnv breakLoc continueLoc = do
   b <- eval e
   case b of
@@ -156,7 +169,7 @@ declareVariablesAndExecuteRest varType items followingInstructions = do
     evalValue (NoInit _ _) = return $ defaultValue varType
   vals <- mapM evalValue items
   let
-    generateSingleLocation val (locs, s') = let l = alloc s' in (l:locs, Map.insert l val s')
+    generateSingleLocation val (locs, currentS) = let l = alloc currentS in (l:locs, Map.insert l val currentS)
     (locations, s') = foldr generateSingleLocation ([], s) vals
   modify (modifyVariableStore s')
   local (declareVariables names locations) (exec followingInstructions)
