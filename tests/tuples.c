@@ -35,3 +35,7 @@ int get_first(<int, int> pair) {
 print(double_int(10));
 print(sum_pair(new tuple(10, 5)));
 print(get_first(new tuple(42, 5)));
+
+<int, bool, string> def;
+print("defaults");
+print(def);

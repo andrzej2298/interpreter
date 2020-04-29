@@ -1,6 +1,6 @@
 module CommonDeclarations where
 
-import System.IO (hPutStrLn, stderr)
+import System.IO (hPutStrLn, hPrint, stderr)
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
@@ -140,10 +140,13 @@ undeclaredFunction :: FunctionName -> Cursor -> Error
 undeclaredFunction fn = NameError ("function " ++ fn ++ " might not have been declared")
 
 printError :: Error -> IO ()
-printError = printStdErr . formatError
+printError = putStrLnStdErr . formatError
 
-printStdErr :: String -> IO ()
-printStdErr = hPutStrLn stderr
+putStrLnStdErr :: String -> IO ()
+putStrLnStdErr = hPutStrLn stderr
+
+printStdErr :: Show a => a -> IO ()
+printStdErr = hPrint stderr
 
 insertManyValues :: Ord a => [a] -> [b] -> Map.Map a b -> Map.Map a b
 insertManyValues keys vals kvMap = foldr addOneValue kvMap pairs where

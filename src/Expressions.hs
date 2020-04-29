@@ -28,7 +28,7 @@ eval (Neg cur e) = do
 eval (EArrDef cur t e) = do
   n <- eval e
   let
-    err = throwError $ TypeError "array size must be a non-negative integer" cur
+    err = throwError $ RuntimeError "array size must be a non-negative integer" cur
     arrayOfDefaults v = VArray t (Vector.replicate (fromInteger v) (defaultValue t))
   case n of
     (VInt v) -> if v >= 0 then return $ arrayOfDefaults v else err

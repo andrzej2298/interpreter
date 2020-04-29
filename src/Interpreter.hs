@@ -21,7 +21,7 @@ parse file = do
   contents <- maybe getContents readFile file
   case pProgram $ myLexer contents of
     Bad s -> do
-        printStdErr s
+        putStrLnStdErr s
         exitFailure
     Ok tree -> return $ fmap fromMaybe tree
 
@@ -29,10 +29,13 @@ parse file = do
 main :: IO ()
 main = do
   args <- getArgs
-  let file = case args of
-        (s:_) -> Just s
-        [] -> Nothing
+  let
+    file = case args of
+      (s:_) -> Just s
+      [] -> Nothing
   tree <- parse file
-  checkTypes tree
-  run tree
+  checkedTree <- checkTypes tree
+  case checkedTree of
+    Right t -> run t
+    Left e -> printError e
   exitSuccess
