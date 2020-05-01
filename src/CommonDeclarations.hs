@@ -153,6 +153,13 @@ insertManyValues keys vals kvMap = foldr addOneValue kvMap pairs where
   addOneValue (k, v) = Map.insert k v
   pairs = zip keys vals
 
+generateLocationsForValues :: Map.Map Location v -> [v] -> ([Location], Map.Map Location v)
+generateLocationsForValues s =
+  foldr generateSingleLocation ([], s) where
+    generateSingleLocation val (locs, currentS) =
+      let newLoc = alloc currentS in
+        (newLoc:locs, Map.insert newLoc val currentS)
+
 getCursor :: Expression -> Cursor
 getCursor e =
   case e of
@@ -173,3 +180,6 @@ getCursor e =
     ERel c _ _ _ -> c
     EAnd c _ _ -> c
     EOr c _ _ -> c
+
+emptyBlock :: Block Cursor
+emptyBlock = Block (0, 0) []

@@ -31,10 +31,6 @@ processExpValue e f = do
 execBlock :: Block Cursor -> ExecMonad
 execBlock (Block _ is) = exec (Sequence is)
 
-emptyBlock :: Block Cursor
-emptyBlock = Block (0, 0) []
-
-
 -- check if a jump statement has been issued (return / break / continue)
 -- if so, ignores the statement
 exec :: Statement -> ExecMonad
@@ -121,8 +117,7 @@ internalExec (While _ e body) = do
   s <- gets controlValues
   r <- ask
   let
-    l = alloc s
-    generateSingleLocation val (locs, currentS) = let newLoc = alloc currentS in (l:locs, Map.insert newLoc val currentS)
+    generateSingleLocation val (locs, currentS) = let newLoc = alloc currentS in (newLoc:locs, Map.insert newLoc val currentS)
     -- initially set break and continue flags to false
     ([breakLoc, continueLoc], s') = foldr generateSingleLocation ([], s) [Flag False, Flag False]
     newEnv = declareControlValues [BreakParameter, ContinueParameter] [breakLoc, continueLoc] r

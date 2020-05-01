@@ -11,8 +11,8 @@ import CommonDeclarations
 
 type TypeCheckMonadT a = ReaderT TypeEnvironment (ExceptT Error
                                                   (StateT TypeStore IO)) a
-type TypeCheckMonad = TypeCheckMonadT Statement
-type TypeCheckResult = Either Error CursorProgram
+type TypeCheckMonad = TypeCheckMonadT ()
+type TypeCheckResult = Either Error ()
 
 type TypeEnvironment = Map.Map VariableName Location
 type TypeStore = Map.Map Location TypeValue
@@ -26,8 +26,13 @@ data TypeValue
   | TTuple [TypeValue]
   deriving (Eq)
 
-infixr 5 :->
-data FunctionType = [TypeValue] :-> TypeValue
+typeMismatchError :: TypeValue -> TypeValue -> Cursor -> Error
+typeMismatchError expectedType actualType =
+  TypeError (concat ["type mismatch: expected ", show expectedType, ", but got: ", show actualType])
+
+-- infixr 5 :->
+-- data FunctionArgument = ByValue TypeValue
+-- data FunctionType = [TypeValue] :-> TypeValue
 
 instance Show TypeValue where
   show t = showsType t "" where
@@ -126,6 +131,7 @@ typeOf (ERel cur e1 op e2) = do
 typeOf (EAnd cur e1 e2) = typeOfLogicOp cur e1 e2
 typeOf (EOr cur e1 e2) = typeOfLogicOp cur e1 e2
 
+
 typeOfLogicOp :: Cursor -> Expression -> Expression -> TypeCheckMonadT TypeValue
 typeOfLogicOp cur e1 e2 = do
   t1 <- typeOf e1
@@ -135,38 +141,92 @@ typeOfLogicOp cur e1 e2 = do
     _ -> throwError $ TypeError ("can't perform && or || of " ++
                                  show t1 ++ " and " ++ show t2) cur
 
-itemType :: Item Cursor -> TypeValue -> TypeCheckMonadT (Cursor, TypeValue, VariableName)
-itemType (NoInit cur (Ident x)) declaredType = return (cur, declaredType, x)
-itemType (Init cur (Ident x) e) _ = do
+itemSignature :: TypeValue -> Item Cursor -> TypeCheckMonadT (Cursor, TypeValue, VariableName)
+itemSignature declaredType (NoInit cur (Ident x)) = return (cur, declaredType, x)
+itemSignature _ (Init cur (Ident x) e) = do
   t <- typeOf e
   return (cur, t, x)
 
 
+checkBlock :: Block Cursor -> TypeCheckMonadT ()
+checkBlock (Block _ is) = check (Sequence is)
+
 check :: Statement -> TypeCheckMonad
-check (Sequence (i:is)) = do
-  ci <- check i
-  (Sequence cis) <- check (Sequence is)
-  return (Sequence (ci:cis))
-check i@(VarDecl _ t e) = do
-  tv <- getTypeFromSyntax t
-  itemTypes <- mapM (flip itemType tv) e
+-- internalExec (Sequence []) = return ()
+-- internalExec (Sequence ((VarDecl _ varType ds):rest)) = declareVariablesAndExecuteRest varType ds (Sequence rest)
+-- internalExec (Sequence ((FnDef cur fnType (Ident fnName) args (Block _ body)):rest)) =
+--   declareFunctionAndExecuteRest fnType fnName cur args (Sequence body) (Sequence rest)
+-- internalExec (Sequence (i:is)) = do
+--   exec i
+--   exec (Sequence is)
+check Empty{} = return ()
+--   t <- typeOf e
+--   r <- ask
+--   s <- get
+--   let
+--     l = alloc s
+--     s' = Map.insert l t s
+--   put s'
+check (Sequence ((VarDecl cur t e):rest)) = do
+  expected <- getTypeFromSyntax t
+  case expected of
+    TVoid -> throwError $ TypeError "variable can't be void" cur
+    _ -> return ()
+  itemSignatures <- mapM (itemSignature expected) e
   let
+    variableNames = map (\(_, _, x) -> x) itemSignatures
     checkAll :: [(Cursor, TypeValue, VariableName)] -> TypeValue -> TypeCheckMonadT ()
     checkAll [] _ = return ()
-    checkAll ((cur, actualType, _):l) expectedType
+    checkAll ((varCur, actualType, _):l) expectedType
       | actualType == expectedType = checkAll l expectedType
-      | otherwise = throwError $ TypeError (concat ["type mismatch: expected ", show expectedType,
-                                                    ", but got: ", show actualType]) cur
-  checkAll itemTypes tv
-  return i
-check i = return i
+      | otherwise = throwError $ typeMismatchError expectedType actualType varCur
+  checkAll itemSignatures expected
+  r <- ask
+  s <- get
+  let
+    types = replicate (length itemSignatures) expected
+    (locs, s') = generateLocationsForValues s types
+  put s'
+  local (insertManyValues variableNames locs) (check (Sequence rest))
+check (Sequence (i:is)) = do
+  check i
+  check (Sequence is)
+check (Sequence []) = return ()
+check (Assign cur (Ident x) e) = do
+  r <- ask
+  s <- get
+  actual <- typeOf e
+  case do
+    l <- Map.lookup x r
+    Map.lookup l s of
+      Just expected -> if actual == expected
+        then return ()
+        else throwError $ typeMismatchError expected actual cur
+      Nothing -> throwError $ undeclaredVariable x cur
+check Break{} = return ()
+check Continue{} = return ()
+check (SExp _ e) = do
+  _ <- typeOf e  -- check if expression is correct
+  return ()
+check (CondElse cur e caseTrue caseFalse) = do
+  b <- typeOf e
+  case b of
+    TBool -> do
+      checkBlock caseTrue
+      checkBlock caseFalse
+    _ -> throwError $ TypeError "condition must be of type bool" cur
+check (Cond cur e bl) = check (CondElse cur e bl emptyBlock)
+check (Print _ e) = do
+  _ <- typeOf e
+  return ()
+check i = throwError $ TypeError (show i) (0, 0)  -- TODO temporary
 
 checkTypes :: CursorProgram -> IO TypeCheckResult
-checkTypes (Program cur p) = do
+checkTypes (Program _ p) = do
   let
     r = Map.empty
     s = Map.empty
   result <- evalStateT (runExceptT (runReaderT (check (Sequence p)) r)) s
   case result of
     Left l -> return $ Left l  -- these two Lefts have different types
-    Right (Sequence is) -> return $ Right $ Program cur is
+    Right () -> return $ Right ()

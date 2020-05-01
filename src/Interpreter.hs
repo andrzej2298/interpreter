@@ -34,8 +34,8 @@ main = do
       (s:_) -> Just s
       [] -> Nothing
   tree <- parse file
-  checkedTree <- checkTypes tree
-  case checkedTree of
-    Right t -> run t
+  typeCheckResult <- checkTypes tree
+  case typeCheckResult of
+    Right () -> run tree
     Left e -> printError e
   exitSuccess
