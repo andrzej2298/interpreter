@@ -117,9 +117,8 @@ internalExec (While _ e body) = do
   s <- gets controlValues
   r <- ask
   let
-    generateSingleLocation val (locs, currentS) = let newLoc = alloc currentS in (newLoc:locs, Map.insert newLoc val currentS)
     -- initially set break and continue flags to false
-    ([breakLoc, continueLoc], s') = foldr generateSingleLocation ([], s) [Flag False, Flag False]
+    ([breakLoc, continueLoc], s') = generateLocationsForValues s [Flag False, Flag False]
     newEnv = declareControlValues [BreakParameter, ContinueParameter] [breakLoc, continueLoc] r
   modify (modifyControlStore s')
   whileLoop e body newEnv breakLoc continueLoc

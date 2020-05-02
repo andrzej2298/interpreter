@@ -105,7 +105,7 @@ eval (ERel cur e1 op e2) = do
     (VString v1, VString v2, EQU _) -> return $ VBool $ v1 == v2
     (VString v1, VString v2, NEQ _) -> return $ VBool $ v1 /= v2
     _ -> throwError $ TypeError ("can't compare " ++ show f1 ++
-                                         " and " ++ show f2) cur
+                                 " and " ++ show f2) cur
 eval (EAnd cur e1 e2) = do
   b1 <- eval e1
   b2 <- eval e2

@@ -3,9 +3,10 @@ int[] a, b = {1,2,3}, c = new int[10];
 
 bool s = 1 < 0;
 
-s = false;
+<int, int> v = tup1[1];
+int w = v[1];
 
-void v;
+s = false;
 
 bool x = true && false;
 
@@ -17,3 +18,39 @@ else {
 	string s = "";
 }
 ;;;
+
+
+<int, bool, string> x = new tuple(1, true, "string");
+<int, <int, bool, string>> y = new tuple(1, x);
+<int, <int, bool, string>> z = new tuple(1, new tuple(1, true, "string"));
+
+print(x);
+print(y);
+print(z);
+int i, j, k, l; bool b; string s;
+tie (i, (j, b, s)) = y; // variable assignment from tuple
+tie (k, _) = y; // variable assignment from tuple, one value ignored
+
+l = y[0];
+
+print(i);
+print(j);
+print(k);
+print(l);
+print(b);
+print(s);
+
+int i = 0;
+while (i < 10) {
+	print(i);
+	i++;
+}
+
+int f(int &x) {
+	return 1;
+}
+
+int x = 10;
+int y = 10;
+int qwerty = f(x);
+print(qwerty);
