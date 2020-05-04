@@ -66,6 +66,10 @@ isArray :: TypeValue -> Bool
 isArray TArray{} = True
 isArray _ = False
 
+isVoid :: TypeValue -> Bool
+isVoid TVoid = True
+isVoid _ = False
+
 getTypeFromSyntax :: Type Cursor -> TypeCheckMonadT TypeValue
 getTypeFromSyntax (Int _) = return TInt
 getTypeFromSyntax (Str _) = return TStr
@@ -261,9 +265,13 @@ check (Sequence ((FnDef cur fnType (Ident fnName) args body):rest)) = do
     f :: FunctionType
     f = formalArgTypes :-> returnType
     (locs, s') = generateLocationsForValues s formalTypes
-    envTransformFunction =
-      declareFunctionType fnName f . declareVariableTypes formalArgNames locs
+    envTransformFunction = declareFunctionType fnName f .
+                           declareVariableTypes formalArgNames locs
   put s'
+  returnPresent <- checkReturnPresentBlock body
+  unless
+    (returnPresent || isVoid returnType)
+    (throwError $ TypeError ("there exists a path with no return in function " ++ fnName) cur)
   local envTransformFunction (checkBlock body)
   local envTransformFunction (check (Sequence rest))
 check (Ret _ _) = return ()  -- TODO
@@ -334,3 +342,20 @@ checkTypes (Program _ p) = do
   case result of
     Left l -> return $ Left l  -- these two Lefts have different types
     Right () -> return $ Right ()
+
+
+checkReturnPresentBlock :: Block Cursor -> TypeCheckMonadT Bool
+checkReturnPresentBlock (Block _ is) = checkReturnPresent (Sequence is)
+
+checkReturnPresent :: Statement -> TypeCheckMonadT Bool
+checkReturnPresent (Ret _ _) = return True
+checkReturnPresent (Sequence is) = do
+  rets <- mapM checkReturnPresent is
+  liftIO $ print is
+  liftIO $ print rets
+  return $ or rets  -- any statement in sequence must return
+checkReturnPresent (CondElse cur _ caseTrue caseFalse) = do
+  truePath <- checkReturnPresentBlock caseTrue
+  falsePath <- checkReturnPresentBlock caseFalse
+  return $ truePath && falsePath
+checkReturnPresent _ = return False

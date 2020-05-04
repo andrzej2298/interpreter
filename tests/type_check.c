@@ -47,10 +47,21 @@ while (i < 10) {
 }
 
 int f(int &x) {
-	return 1;
+	if (true) {
+		return 1;
+	}
+	else {
+		return 0;
+	}
 }
 
 int x = 10;
 int y = 10;
 int qwerty = f(x);
 print(qwerty);
+
+void g() {
+
+}
+
+g();
