@@ -22,12 +22,21 @@ data FunctionType = [FunctionArgument] :-> TypeValue
 
 data TypeEnvironment = TypeEnvironment {
   variableTypes :: VariableTypeEnvironment,
-  functionTypes :: FunctionTypeEnvironment
+  functionTypes :: FunctionTypeEnvironment,
+  returnType :: ReturnTypeLocation
 }
 
 type VariableTypeEnvironment = Map.Map VariableName Location
 type FunctionTypeEnvironment = Map.Map FunctionName FunctionType
-type TypeStore = Map.Map Location TypeValue
+type ReturnTypeLocation = Maybe Location
+
+type VariableTypeStore = Map.Map Location TypeValue
+type ReturnTypeStore = Map.Map Location TypeValue
+
+data TypeStore = TypeStore {
+  variableTypeValues :: VariableTypeStore,
+  returnTypeValues :: ReturnTypeStore
+}
 
 data TypeValue
   = TInt
@@ -43,6 +52,15 @@ declareVariableTypes xs ls env = env { variableTypes = insertManyValues xs ls (v
 
 declareFunctionType :: FunctionName -> FunctionType -> TypeEnvironment -> TypeEnvironment
 declareFunctionType f t env = env { functionTypes = Map.insert f t (functionTypes env) }
+
+declareReturnType :: Location -> TypeEnvironment -> TypeEnvironment
+declareReturnType l env = env { returnType = Just l }
+
+modifyVariableTypeStore :: VariableTypeStore -> TypeStore -> TypeStore
+modifyVariableTypeStore s env = env { variableTypeValues = s }
+
+modifyReturnLocationStore :: ReturnTypeStore -> TypeStore -> TypeStore
+modifyReturnLocationStore s env = env { returnTypeValues = s }
 
 typeMismatchError :: TypeValue -> TypeValue -> Cursor -> Error
 typeMismatchError expectedType actualType =
@@ -149,6 +167,18 @@ typeOf (ERel cur e1 op e2) = do
 typeOf (EAnd cur e1 e2) = typeOfLogicOp cur e1 e2
 typeOf (EOr cur e1 e2) = typeOfLogicOp cur e1 e2
 typeOf (EVar cur (Ident x)) = getVariableType x cur
+typeOf (EApp cur (Ident "len") actualArgs) = do
+  -- len is special, because it can take arrays of different types
+  -- as input
+  when
+    (length actualArgs /= 1)
+    (throwError $ TypeError
+     "wrong number of arguments: expected 1" cur)
+  [t] <- mapM typeOf actualArgs
+  unless
+    (isArray t)
+    (throwError $ TypeError "can only check length of a single array" cur)
+  return TInt
 typeOf (EApp cur (Ident fn) actualArgs) = do
   (formalArgs :-> resultType) <- getFunctionType fn cur
   when
@@ -163,7 +193,7 @@ typeOf (EApp cur (Ident fn) actualArgs) = do
     matchOneType :: (FunctionArgument, Expression) -> TypeCheckMonad
     matchOneType (ByValue expected, expr) = checkArgumentType expected expr
     matchOneType (ByReference expected, expr@EVar{}) = checkArgumentType expected expr
-    matchOneType (ByReference t, e) = throwError $ TypeError "argument passed by reference must be a variable" (getCursor e)
+    matchOneType (ByReference _, e) = throwError $ TypeError "argument passed by reference must be a variable" (getCursor e)
   mapM_ matchOneType (zip formalArgs actualArgs)
   return resultType
 
@@ -177,12 +207,12 @@ typeOf (EItemInd cur (Ident x) e) = do
       Nothing -> throwError $ TypeError "tuple index out of bounds" cur
     (_, TArray{}, _) -> throwError $ TypeError "array index must be an integer" cur
     (_, TTuple{}, _) -> throwError $ TypeError "tuple index must be a positive static integer" cur
-typeOf e = throwError $ TypeError (show e ++ " not implemented") (getCursor e)
+    _ -> throwError $ TypeError "expected tuple or array" cur
 
 getVariableType :: VariableName -> Cursor -> TypeCheckMonadT TypeValue
 getVariableType x cur = do
   r <- asks variableTypes
-  s <- get
+  s <- gets variableTypeValues
   case do
     l <- Map.lookup x r
     Map.lookup l s of
@@ -247,41 +277,57 @@ check (Sequence ((VarDecl cur t e):rest)) = do
       | actualType == expectedType = checkAll l expectedType
       | otherwise = throwError $ typeMismatchError expectedType actualType varCur
   checkAll itemSignatures expected
-  s <- get
+  s <- gets variableTypeValues
   let
     types = replicate (length itemSignatures) expected
     (locs, s') = generateLocationsForValues s types
-  put s'
+  modify (modifyVariableTypeStore s')
   local (declareVariableTypes variableNames locs) (check (Sequence rest))
 check (Sequence ((FnDef cur fnType (Ident fnName) args body):rest)) = do
-  envOfDeclaration <- ask
-  s <- get
-  returnType <- getTypeFromSyntax fnType
+  s <- gets variableTypeValues
+  -- retLoc <- asks returnType
+  retStore <- gets returnTypeValues
+  fnReturnType <- getTypeFromSyntax fnType
   formalArgSignatures <- mapM getFunctionArgument args
   let
     formalArgTypes = map snd formalArgSignatures
     formalTypes = map getTypeFromArgType formalArgTypes
     formalArgNames = map fst formalArgSignatures
     f :: FunctionType
-    f = formalArgTypes :-> returnType
+    f = formalArgTypes :-> fnReturnType
     (locs, s') = generateLocationsForValues s formalTypes
+    ([retLoc], retStore') = generateLocationsForValues retStore [fnReturnType]
     envTransformFunction = declareFunctionType fnName f .
                            declareVariableTypes formalArgNames locs
-  put s'
+  modify (modifyReturnLocationStore retStore' .
+          modifyVariableTypeStore s')
+  local (declareReturnType retLoc . envTransformFunction) (checkBlock body)
   returnPresent <- checkReturnPresentBlock body
   unless
-    (returnPresent || isVoid returnType)
+    (returnPresent || isVoid fnReturnType)
     (throwError $ TypeError ("there exists a path with no return in function " ++ fnName) cur)
-  local envTransformFunction (checkBlock body)
   local envTransformFunction (check (Sequence rest))
-check (Ret _ _) = return ()  -- TODO
-check (VRet _) = return ()  -- TODO
+check (Ret cur e) = do
+  actualReturnType <- typeOf e
+  checkReturn cur actualReturnType
+check (VRet cur) = checkReturn cur TVoid
 check (Sequence (i:is)) = do
   check i
   check (Sequence is)
 check (Sequence []) = return ()
 check v@VarDecl{} = check (Sequence [v])
 check f@FnDef{} = check (Sequence [f])
+check (IndAssign cur (Ident a) index e) = do
+  aType <- getVariableType a cur
+  -- tuples are immutable
+  case aType of
+    TTuple{} -> throwError $ TypeError "tuples are immutable" cur
+    _ -> return ()
+  expected <- typeOf (EItemInd cur (Ident a) index)
+  actual <- typeOf e
+  when
+    (expected /= actual)
+    (throwError $ typeMismatchError expected actual cur)
 check (Assign cur (Ident x) e) = do
   actual <- typeOf e
   expected <- getVariableType x cur
@@ -329,15 +375,34 @@ check (Cond cur e bl) = check (CondElse cur e bl emptyBlock)
 check (Print _ e) = do
   _ <- typeOf e
   return ()
-check i = throwError $ TypeError (show i) (0, 0)  -- TODO temporary
+-- check i = throwError $ TypeError (show i) (0, 0)  -- TODO temporary
 -- check i = return ()  -- TODO temporary
+
+checkReturn :: Cursor -> TypeValue -> TypeCheckMonad
+checkReturn cur actualReturnType = do
+  loc <- asks returnType
+  s <- gets returnTypeValues
+  case do
+    l <- loc
+    Map.lookup l s of
+      Just expectedReturnType -> when
+        (expectedReturnType /= actualReturnType)
+        (throwError $ typeMismatchError expectedReturnType actualReturnType cur)
+      Nothing -> throwError $ TypeError "return outside of a function" cur
 
 checkTypes :: CursorProgram -> IO TypeCheckResult
 -- checkTypes (Program _ p) = return $ Right ()
 checkTypes (Program _ p) = do
   let
-    r = TypeEnvironment { variableTypes = Map.empty, functionTypes = Map.empty }
-    s = Map.empty
+    r = TypeEnvironment {
+      variableTypes = Map.empty,
+      functionTypes = Map.empty,
+      returnType = Nothing
+    }
+    s = TypeStore {
+      variableTypeValues = Map.empty,
+      returnTypeValues = Map.empty
+    }
   result <- evalStateT (runExceptT (runReaderT (check (Sequence p)) r)) s
   case result of
     Left l -> return $ Left l  -- these two Lefts have different types
@@ -351,10 +416,8 @@ checkReturnPresent :: Statement -> TypeCheckMonadT Bool
 checkReturnPresent (Ret _ _) = return True
 checkReturnPresent (Sequence is) = do
   rets <- mapM checkReturnPresent is
-  liftIO $ print is
-  liftIO $ print rets
   return $ or rets  -- any statement in sequence must return
-checkReturnPresent (CondElse cur _ caseTrue caseFalse) = do
+checkReturnPresent (CondElse _ _ caseTrue caseFalse) = do
   truePath <- checkReturnPresentBlock caseTrue
   falsePath <- checkReturnPresentBlock caseFalse
   return $ truePath && falsePath

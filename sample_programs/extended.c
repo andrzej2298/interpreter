@@ -37,7 +37,7 @@ bool[] d = new bool[10]; // default false
 <int, <int, bool, string>> z = new tuple(1, new tuple(1, true, "string"));
 
 int i, j, k, l; bool a; string s;
-tie (i, (j, b, s)) = y; // variable assignment from tuple
+tie (i, (j, a, s)) = y; // variable assignment from tuple
 tie (k, _) = y; // variable assignment from tuple, one value ignored
 
 l = y[0];
@@ -64,6 +64,7 @@ while (true) {
 int i = 0;
 while (i < 10) {
     if (i == 5) {
+        i++;
         continue;
     }
     print(i);

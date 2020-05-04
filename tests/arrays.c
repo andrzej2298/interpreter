@@ -3,8 +3,8 @@ string[] b = new string[10]; // default ""
 bool[] c = new bool[10]; // default false
 
 int[] d = {1, 2, 3, 4};
-string[] e = {1, 2, 3, 4};
-bool[] f = {1, 2, 3, 4};
+string[] e = {"a", "b", "c"};
+bool[] f = {true, false, true};
 
 print(d[3]);
 // print(d[4]);
@@ -33,8 +33,8 @@ void pass_by_reference(int[] &ns) {
 print("fib up to 5");
 print(fib(5));
 
-int ns = {1,2,3,4};
-int ms = {1,2,3,4};
+int[] ns = {1,2,3,4};
+int[] ms = {1,2,3,4};
 pass_by_value(ns);
 pass_by_reference(ms);
 print("pass by value");

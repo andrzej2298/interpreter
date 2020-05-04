@@ -60,8 +60,13 @@ int y = 10;
 int qwerty = f(x);
 print(qwerty);
 
-void g() {
-
+int g() {
+	return 10;
 }
 
 g();
+
+<int, int> int_pair = new tuple(1, 1);
+c[0] = 7;
+print(int_pair);
+print(c);

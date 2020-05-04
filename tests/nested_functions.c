@@ -31,6 +31,8 @@ n = 1;
 print(h(2));
 
 int start = 100;
+
+// TODO check
 int nest(int start) {
 	print("nest");
 	print(start);
@@ -40,6 +42,9 @@ int nest(int start) {
 			print(start);
 			if (start > 0) {
 				return nest(start - 1);
+			}
+			else {
+				return -321;
 			}
 		}
 		return inside(start - 1);
