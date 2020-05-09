@@ -1,6 +1,3 @@
-
-// NESTED FUNCTION DECLARATIONS
-// e() == 0
 int e() {
     int x = 0;
 
@@ -32,14 +29,13 @@ print(h(2));
 
 int start = 100;
 
-// TODO check
 int nest(int start) {
-	// print("nest");
-	// print(start);
+	print("nest");
+	print(start);
 	if (start > 0) {
 		int inside(int start) {
-			// print("inside");
-			// print(start);
+			print("inside");
+			print(start);
 			if (start > 0) {
 				return nest(start - 1);
 			}
@@ -55,7 +51,6 @@ int nest(int start) {
 print("nest");
 print(nest(10));
 print(nest(11));
-print(nest(10));
 
 int x = 10;
 int y = 90;

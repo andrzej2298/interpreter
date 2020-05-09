@@ -27,8 +27,9 @@ data Value =
   VBool Bool |
   VString String |
   VoidValue |
-  VArray (Type Cursor) (Vector.Vector Value) |
+  VArray (Vector.Vector Value) |
   VTuple (Vector.Vector Value)
+  deriving (Eq)
 
 type Function = [Expression] -> EvalMonad
 data ControlValue = ReturnValue (Maybe Value) | Flag Bool
@@ -36,19 +37,12 @@ data ControlValue = ReturnValue (Maybe Value) | Flag Bool
 
 dummyCursor :: Cursor
 dummyCursor = (0, 0)
-getType :: Value -> Type Cursor
-getType (VInt _) = Int dummyCursor
-getType (VBool _) = Bool dummyCursor
-getType (VString _) = Str dummyCursor
-getType (VArray t _) = Array dummyCursor t
-getType VoidValue = Void dummyCursor
-getType (VTuple vec) = Tuple dummyCursor (map getType $ Vector.toList vec)
 
 defaultValue :: Type Cursor -> Value
 defaultValue (Int _) = VInt 0
 defaultValue (Bool _) = VBool False
 defaultValue (Str _) = VString ""
-defaultValue (Array _ t) = VArray t Vector.empty
+defaultValue (Array _ _) = VArray Vector.empty
 defaultValue (Void _) = VoidValue
 defaultValue (Tuple _ types) = VTuple (Vector.fromList (map defaultValue types))
 
@@ -57,12 +51,9 @@ instance Show Value where
     showsValue (VInt i) = shows i
     showsValue (VBool b) = showString $ map toLower (show b)
     showsValue (VString s) = showString "\"" . showString s . showString "\""
-    showsValue (VArray _ vec) = showString "[" . showString (intercalate ", " $ map show (Vector.toList vec)) . showString "]"
+    showsValue (VArray vec) = showString "[" . showString (intercalate ", " $ map show (Vector.toList vec)) . showString "]"
     showsValue VoidValue = showString "void"
     showsValue (VTuple vec) = showString "<" . showString (intercalate ", " $ map show (Vector.toList vec)) . showString ">"
-
-showValueType :: Value -> String
-showValueType = show . getType
 
 data Error =
   ArithmeticError String Cursor |

@@ -46,8 +46,8 @@ internalExec (Empty _) = return ()
 
 internalExec (Sequence []) = return ()
 internalExec (Sequence ((VarDecl _ varType ds):rest)) = declareVariablesAndExecuteRest varType ds (Sequence rest)
-internalExec (Sequence ((FnDef cur fnType (Ident fnName) args (Block _ body)):rest)) =
-  declareFunctionAndExecuteRest fnType fnName cur args (Sequence body) (Sequence rest)
+internalExec (Sequence ((FnDef _ fnType (Ident fnName) args (Block _ body)):rest)) =
+  declareFunctionAndExecuteRest fnType fnName args (Sequence body) (Sequence rest)
 internalExec (Sequence (i:is)) = do
   exec i
   exec (Sequence is)
@@ -68,31 +68,31 @@ internalExec d@FnDef{} = exec (Sequence [d])  -- no instructions are after this 
 {---------------------------------------------------------
                     ASSIGNMENT STATEMENTS
 ----------------------------------------------------------}
-internalExec (Assign cur (Ident x) e) = do
+internalExec (Assign _ (Ident x) e) = do
   v <- eval e
-  assignValueToVariable v x cur
+  assignValueToVariable v x
 internalExec (IndAssign cur (Ident a) index e) = do
   valueToAssign <- eval e
   i <- eval index
   arr <- eval (EVar cur (Ident a))
   case (i, arr) of
-    (VInt v, VArray t vec) -> do
+    (VInt v, VArray vec) -> do
       let newVec = Vector.update vec (Vector.singleton (fromInteger v, valueToAssign))
-      assignValueToVariable (VArray t newVec) a cur
-    (_, VArray{}) -> throwError $ TypeError "array index must be an integer" cur
-    _ -> throwError $ TypeError (a ++ " is not an array") cur
-internalExec (TupTie cur tievars e) = do
+      assignValueToVariable (VArray newVec) a
+    _ -> undefined
+
+internalExec (TupTie _ tievars e) = do
   v <- eval e
   let
     assignOne :: (TieVar Cursor, Value) -> ExecMonad
     assignOne (TieIgnore _, _) = return ()
-    assignOne (TieVar tCur (Ident x), val) = assignValueToVariable val x tCur
-    assignOne (TieVars tCur xs, val) = case val of
+    assignOne (TieVar _ (Ident x), val) = assignValueToVariable val x
+    assignOne (TieVars _ xs, val) = case val of
       (VTuple vals) -> mapM_ assignOne (zip xs (Vector.toList vals))
-      _ -> throwError $ TypeError "can tie only a tuple" tCur
+      _ -> undefined
   case v of
     (VTuple vals) -> mapM_ assignOne (zip tievars (Vector.toList vals))
-    _ -> throwError $ TypeError "can tie only a tuple" cur
+    _ -> undefined
 internalExec (Incr cur ident) = exec (Assign cur ident (EAdd cur (EVar cur ident) (Plus cur) (ELitInt cur 1)))
 internalExec (Decr cur ident) = exec (Assign cur ident (EAdd cur (EVar cur ident) (Minus cur) (ELitInt cur 1)))
 
@@ -105,12 +105,11 @@ internalExec (SExp _ e) = processExpValue e (const $ return ())
 {---------------------------------------------------------
                     CONDITIONALS AND LOOPS
 ----------------------------------------------------------}
-internalExec (CondElse cur e caseTrue caseFalse) = do
+internalExec (CondElse _ e caseTrue caseFalse) = do
   b <- eval e
   case b of
     (VBool v) -> execBlock $ if v then caseTrue else caseFalse
-    other -> throwError $ TypeError ("incompatible type in condition " ++
-                                     show other) cur
+    _ -> undefined
 internalExec (Cond cur e bl) = exec (CondElse cur e bl emptyBlock)
 
 internalExec (While _ e body) = do
@@ -145,8 +144,7 @@ whileLoop e body whileEnv breakLoc continueLoc = do
             _ -> whileLoop e body whileEnv breakLoc continueLoc
         -- don't execute loop body
         else return ()
-    other -> throwError $ TypeError ("incompatible type in condition " ++
-                                      show other) (getCursor e)
+    _ -> undefined
 
 
 {---------------------------------------------------------
@@ -172,8 +170,8 @@ declareVariablesAndExecuteRest varType items followingInstructions = do
 {---------------------------------------------------------
                     FUNCTIONS
 ----------------------------------------------------------}
-declareFunctionAndExecuteRest :: Type Cursor -> FunctionName -> Cursor -> [Arg Cursor] -> Statement -> Statement -> ExecMonad
-declareFunctionAndExecuteRest fnType fnName cur formalArgs body rest = do
+declareFunctionAndExecuteRest :: Type Cursor -> FunctionName -> [Arg Cursor] -> Statement -> Statement -> ExecMonad
+declareFunctionAndExecuteRest fnType fnName formalArgs body rest = do
   rOfDeclaration <- ask
   let
     f :: Function
@@ -188,7 +186,7 @@ declareFunctionAndExecuteRest fnType fnName cur formalArgs body rest = do
       case (Map.lookup retLocation s, fnType) of
         (Just (ReturnValue (Just v)), _) -> return v
         (_, Void _) -> return VoidValue
-        _ -> throwError $ TypeError "function didn't return anything" cur
+        _ -> undefined
   local (declareFunction fnName f) (exec rest)
 
 getFunctionEnvironmentAndReturnLocation :: FunctionName -> Function -> VariableEnvironment -> Environment ->
@@ -200,6 +198,7 @@ getFunctionEnvironmentAndReturnLocation fnName f variableEnvOfApplication rOfDec
     resultEnvironment = declareControlValue ReturnParameter retLocation functionAndArgumentsDeclaredEnv
     functionAndArgumentsDeclaredEnv = declareFunction fnName f argumentsDeclaredEnv
     retLocation = alloc s
+  modify (modifyControlStore $ Map.insert retLocation (ReturnValue Nothing) s)
   return (resultEnvironment, retLocation)
 
 getEnvironmentWithActualArgs :: [Arg Cursor] -> [Expression] -> VariableEnvironment -> Environment -> InterpreterMonad Environment
@@ -209,15 +208,15 @@ getEnvironmentWithActualArgs formalArgs actualArgs variableEnvOfApplication rOfD
     getName (ArgVal _ _ (Ident fn)) = fn
     getName (ArgRef _ _ (Ident fn)) = fn
     argNames = map getName formalArgs
-    generateSingleLocation (ArgRef{}, (EVar cur (Ident xActual))) (locs, s') =
+    generateSingleLocation (ArgRef{}, (EVar _ (Ident xActual))) (locs, s') =
       case Map.lookup xActual variableEnvOfApplication of
         Just l -> return (l:locs, s')
-        Nothing -> throwError $ undeclaredVariable xActual cur
+        Nothing -> undefined
     generateSingleLocation (ArgVal{}, e) (locs, s') = do
       let l = alloc s'
       val <- eval e
       return (l:locs, Map.insert l val s')
-    generateSingleLocation (ArgRef{}, e) _ = throwError $ TypeError "argument passed by reference must be a variable" (getCursor e)
+    generateSingleLocation _ _ = undefined
   (argLocations, s') <- foldrM generateSingleLocation ([], s) (zip formalArgs actualArgs)
   modify (modifyVariableStore s')
   return $ declareVariables argNames argLocations rOfDeclaration
@@ -226,14 +225,14 @@ getEnvironmentWithActualArgs formalArgs actualArgs variableEnvOfApplication rOfD
 {---------------------------------------------------------
                     GENERAL HELPER FUNCTIONS
 ----------------------------------------------------------}
-assignValueToVariable :: Value -> VariableName -> Cursor -> ExecMonad
-assignValueToVariable v x cur = do
+assignValueToVariable :: Value -> VariableName -> ExecMonad
+assignValueToVariable v x = do
   s <- gets values
   r <- asks variables
   let optLoc = Map.lookup x r
   case optLoc of
     Just l -> modify (modifyVariableStore $ Map.insert l v s)
-    Nothing -> throwError $ undeclaredVariable x cur
+    Nothing -> undefined
 
 getControlValue :: ControlParameter -> InterpreterMonad Bool
 getControlValue x = do
@@ -253,5 +252,6 @@ setControlValue parameter val = do
   let loc = Map.lookup parameter r
   case loc of
     Just l -> modify (modifyControlStore $ Map.insert l val s)
-    -- _ -> return () -- TODO
-    _ -> error "not found"
+    -- if break or continue are outside a loop,
+    -- they are equivalent to a no-op
+    _ -> return ()

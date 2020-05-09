@@ -36,11 +36,6 @@ main = do
   tree <- parse file
   typeCheckResult <- checkTypes tree
   case typeCheckResult of
-    Right () -> do
-      -- TODO delete debug
-      putStrLnStdErr "-----------------"
-      putStrLnStdErr "type check border"
-      putStrLnStdErr "-----------------"
-      run tree
+    Right () -> run tree
     Left e -> printError e
   exitSuccess

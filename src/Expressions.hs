@@ -19,39 +19,36 @@ eval (ELitFalse _) = return $ VBool False
 eval (ETupLit _ exprs) = do
   vals <- mapM eval exprs
   return $ VTuple $ Vector.fromList vals
-eval (Neg cur e) = do
+eval (Neg _ e) = do
   n <- eval e
   case n of
     (VInt v) -> return $ VInt (-v)
-    v -> throwError $ TypeError ("can't negate value of type " ++
-                                 show v) cur
+    _ -> undefined
 eval (EArrDef cur t e) = do
   n <- eval e
   let
     err = throwError $ RuntimeError "array size must be a non-negative integer" cur
-    arrayOfDefaults v = VArray t (Vector.replicate (fromInteger v) (defaultValue t))
+    arrayOfDefaults v = VArray (Vector.replicate (fromInteger v) (defaultValue t))
   case n of
     (VInt v) -> if v >= 0 then return $ arrayOfDefaults v else err
     _ -> err
-eval (EArrExp cur []) = throwError $ TypeError "explicitly defined array can't be empty" cur
+eval (EArrExp _ []) = undefined
 eval (EArrExp _ exprs) = do
   vals <- mapM eval exprs
-  let t = getType $ head vals
-  return $ VArray t (Vector.fromList vals)
-eval (Not cur e) = do
+  return $ VArray (Vector.fromList vals)
+eval (Not _ e) = do
   b <- eval e
   case b of
     (VBool v) -> return $ VBool (not v)
-    v -> throwError $ TypeError ("can't negate value of type " ++
-                                     show v) cur
+    _ -> undefined
 eval (EString _ s) = return $ VString $ filter (/='"') s
-eval (EVar cur (Ident x)) = getVariableValue cur x
-eval (EApp cur (Ident fn) args) =
+eval (EVar _ (Ident x)) = getVariableValue x
+eval (EApp _ (Ident fn) args) =
   case fn of
-    "len" -> getArrayLength cur args
-    userFunction -> applyFunction userFunction cur args
+    "len" -> getArrayLength args
+    userFunction -> applyFunction userFunction args
 eval (EItemInd cur (Ident x) e) = do
-  arr <- getVariableValue cur x
+  arr <- getVariableValue x
   n <- eval e
   let
     indexLookup :: Vector.Vector Value -> Integer -> EvalMonad
@@ -59,13 +56,11 @@ eval (EItemInd cur (Ident x) e) = do
       Just res -> return res
       Nothing -> throwError $ RuntimeError "array index out of bounds" cur
   case (n, arr) of
-    (VInt v, VArray _ vec) -> indexLookup vec v
+    (VInt v, VArray vec) -> indexLookup vec v
     (VInt v, VTuple vec) -> indexLookup vec v
-    (_, VArray{}) -> throwError $ TypeError "array index must be an integer" cur
-    (_, VTuple{}) -> throwError $ TypeError "tuple index must be an integer" cur
-    _ -> throwError $ TypeError (x ++ " is not an array or tuple") cur
+    _ -> undefined
 -- ARITHMETIC OPERATIONS
-eval (EAdd cur e1 op e2) = do
+eval (EAdd _ e1 op e2) = do
   let opfun = case op of
                 (Plus _) -> (+)
                 (Minus _) -> (-)
@@ -74,8 +69,7 @@ eval (EAdd cur e1 op e2) = do
   case (n1, n2, op) of
     (VInt v1, VInt v2, _) -> return $ VInt $ opfun v1 v2
     (VString v1, VString v2, Plus _) -> return $ VString $ v1 ++ v2
-    (f1, f2, _) -> throwError $ TypeError ("can't add or subtract " ++
-                                           show f1 ++ " and " ++ show f2) cur
+    _ -> undefined
 eval (EMul cur e1 op e2) = do
   let opfun = case op of
                 (Times _) -> (*)
@@ -86,9 +80,8 @@ eval (EMul cur e1 op e2) = do
   case (n1, n2, op) of
     (VInt _, VInt 0, Div _) -> throwError $ ArithmeticError "division by zero" cur
     (VInt v1, VInt v2, _) -> return $ VInt $ opfun v1 v2
-    (f1, f2, _) -> throwError $ TypeError ("can't multiply or divide " ++
-                                           show f1 ++ " and " ++ show f2) cur
-eval (ERel cur e1 op e2) = do
+    _ -> undefined
+eval (ERel _ e1 op e2) = do
   f1 <- eval e1
   f2 <- eval e2
   let opfun = case op of
@@ -100,43 +93,45 @@ eval (ERel cur e1 op e2) = do
                 (NEQ _) -> (/=)
   case (f1, f2, op) of
     (VInt v1, VInt v2, _) -> return $ VBool $ opfun v1 v2
-    (VBool v1, VBool v2, EQU _) -> return $ VBool $ v1 == v2
-    (VBool v1, VBool v2, NEQ _) -> return $ VBool $ v1 /= v2
-    (VString v1, VString v2, EQU _) -> return $ VBool $ v1 == v2
-    (VString v1, VString v2, NEQ _) -> return $ VBool $ v1 /= v2
-    _ -> throwError $ TypeError ("can't compare " ++ show f1 ++
-                                 " and " ++ show f2) cur
-eval (EAnd cur e1 e2) = do
-  b1 <- eval e1
-  b2 <- eval e2
-  case (b1, b2) of
-    (VBool v1, VBool v2) -> return $ VBool $ v1 && v2
-    (f1, f2) -> throwError $ TypeError ("can't perform conjunction of " ++
-                                        show f1 ++ " and " ++ show f2) cur
-eval (EOr cur e1 e2) = do
-  b1 <- eval e1
-  b2 <- eval e2
-  case (b1, b2) of
-    (VBool v1, VBool v2) -> return $ VBool $ v1 || v2
-    (f1, f2) -> throwError $ TypeError ("can't perform alterative of " ++
-                                        show f1 ++ " and " ++ show f2) cur
+    (_, _, EQU _) -> return $ VBool $ f1 == f2
+    (_, _, NEQ _) -> return $ VBool $ f1 /= f2
+    _ -> undefined
+eval (EAnd _ e1 e2) = do
+  b1 <- eval e1  -- lazy evaluation of logic expressions
+  case b1 of
+    VBool False -> return $ VBool False
+    VBool True -> evalSecond e2
+    _ -> undefined
+eval (EOr _ e1 e2) = do
+  b1 <- eval e1  -- lazy evaluation of logic expressions
+  case b1 of
+    VBool True -> return $ VBool True
+    VBool False -> evalSecond e2
+    _ -> undefined
 
-applyFunction :: FunctionName -> Cursor -> [Expression] -> EvalMonad
-applyFunction fn cur args = do
+
+evalSecond :: Expression -> EvalMonad
+evalSecond e = do
+  b <- eval e
+  case b of
+    v@VBool{} -> return v
+    _ -> undefined
+
+applyFunction :: FunctionName -> [Expression] -> EvalMonad
+applyFunction fn args = do
   r <- asks functions
   case Map.lookup fn r of
     Just f -> f args
-    Nothing -> throwError $ undeclaredFunction fn cur
+    Nothing -> undefined
 
-arrayError :: Cursor -> Error
-arrayError = TypeError "can only check length of a single array"
-getArrayLength :: Cursor -> [Expression] -> EvalMonad
-getArrayLength cur [EVar _ (Ident a)] = do
-  arr <- getVariableValue cur a
+
+getArrayLength :: [Expression] -> EvalMonad
+getArrayLength [e] = do
+  arr <- eval e
   case arr of
-    (VArray _ vec) -> return (VInt (toInteger (length vec)))
-    _ -> throwError $ arrayError cur
-getArrayLength cur _ = throwError $ arrayError cur
+    (VArray vec) -> return (VInt (toInteger (length vec)))
+    _ -> undefined
+getArrayLength _ = undefined
 
 maybeGetVariableValue :: VariableName -> InterpreterMonad (Maybe Value)
 maybeGetVariableValue x = do
@@ -146,9 +141,7 @@ maybeGetVariableValue x = do
     l <- Map.lookup x r
     Map.lookup l s
 
-getVariableValue :: Cursor -> VariableName -> EvalMonad
-getVariableValue cur x = do
+getVariableValue :: VariableName -> EvalMonad
+getVariableValue x = do
   maybeValue <- maybeGetVariableValue x
-  case maybeValue of
-    Just v -> return v
-    Nothing -> throwError $ undeclaredVariable x cur
+  maybe undefined return maybeValue

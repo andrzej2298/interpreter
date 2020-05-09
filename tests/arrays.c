@@ -60,3 +60,5 @@ int sum(int[] array) {
 print(arr);
 print("sum: ");
 print(sum(arr));
+
+print({1, 2, 3} == {"a", "b", "c"});

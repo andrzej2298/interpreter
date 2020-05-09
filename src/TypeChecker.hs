@@ -47,60 +47,24 @@ data TypeValue
   | TTuple (Vector.Vector TypeValue)
   deriving (Eq)
 
-declareVariableTypes :: [VariableName] -> [Location] -> TypeEnvironment -> TypeEnvironment
-declareVariableTypes xs ls env = env { variableTypes = insertManyValues xs ls (variableTypes env) }
 
-declareFunctionType :: FunctionName -> FunctionType -> TypeEnvironment -> TypeEnvironment
-declareFunctionType f t env = env { functionTypes = Map.insert f t (functionTypes env) }
-
-declareReturnType :: Location -> TypeEnvironment -> TypeEnvironment
-declareReturnType l env = env { returnType = Just l }
-
-modifyVariableTypeStore :: VariableTypeStore -> TypeStore -> TypeStore
-modifyVariableTypeStore s env = env { variableTypeValues = s }
-
-modifyReturnLocationStore :: ReturnTypeStore -> TypeStore -> TypeStore
-modifyReturnLocationStore s env = env { returnTypeValues = s }
-
-typeMismatchError :: TypeValue -> TypeValue -> Cursor -> Error
-typeMismatchError expectedType actualType =
-  TypeError (concat ["type mismatch: expected ", show expectedType, ", but got ", show actualType])
-
-instance Show TypeValue where
-  show t = showsType t "" where
-    showsType TInt = showString "int"
-    showsType TStr = showString "string"
-    showsType TBool = showString "bool"
-    showsType TVoid = showString "void"
-    showsType (TArray at) = shows at . showString "[]"
-    showsType (TTuple ts) = showString "<" . showString (intercalate ", " $ map show (Vector.toList ts)) . showString ">"
-
-isSimple :: TypeValue -> Bool
-isSimple TArray{} = False
-isSimple TTuple{} = False
-isSimple _ = True
-
-isArray :: TypeValue -> Bool
-isArray TArray{} = True
-isArray _ = False
-
-isVoid :: TypeValue -> Bool
-isVoid TVoid = True
-isVoid _ = False
-
-getTypeFromSyntax :: Type Cursor -> TypeCheckMonadT TypeValue
-getTypeFromSyntax (Int _) = return TInt
-getTypeFromSyntax (Str _) = return TStr
-getTypeFromSyntax (Bool _) = return TBool
-getTypeFromSyntax (Void _) = return TVoid
-getTypeFromSyntax (Array cur t) = do
-  vt <- getTypeFromSyntax t
-  let err = TypeError "array must be of a simple type" cur
-  if isSimple vt then return $ TArray vt else throwError err
-getTypeFromSyntax (Tuple cur ts) = do
-  vts <- mapM getTypeFromSyntax ts
-  let err = TypeError "tuple can't hold an array" cur
-  if any isArray vts then throwError err else return $ TTuple (Vector.fromList vts)
+-- top level function which checks the types
+checkTypes :: CursorProgram -> IO TypeCheckResult
+checkTypes (Program _ p) = do
+  let
+    r = TypeEnvironment {
+      variableTypes = Map.empty,
+      functionTypes = Map.empty,
+      returnType = Nothing
+    }
+    s = TypeStore {
+      variableTypeValues = Map.empty,
+      returnTypeValues = Map.empty
+    }
+  result <- evalStateT (runExceptT (runReaderT (check (Sequence p)) r)) s
+  case result of
+    Left l -> return $ Left l  -- these two Lefts have different types
+    Right () -> return $ Right ()
 
 typeOf :: Expression -> TypeCheckMonadT TypeValue
 typeOf (ELitInt _ _) = return TInt
@@ -224,7 +188,7 @@ getFunctionType fn cur = do
   r <- asks functionTypes
   case Map.lookup fn r of
       Just t -> return t
-      Nothing -> throwError $ undeclaredVariable fn cur
+      Nothing -> throwError $ undeclaredFunction fn cur
 
 getFunctionArgument :: Arg Cursor -> TypeCheckMonadT (VariableName, FunctionArgument)
 getFunctionArgument (ArgVal _ t (Ident x)) = do
@@ -268,6 +232,7 @@ check (Sequence ((VarDecl cur t e):rest)) = do
   case expected of
     TVoid -> throwError $ TypeError "variable can't be void" cur
     _ -> return ()
+  -- check if assigned expressions match the expected type
   itemSignatures <- mapM (itemSignature expected) e
   let
     variableNames = map (\(_, _, x) -> x) itemSignatures
@@ -277,18 +242,20 @@ check (Sequence ((VarDecl cur t e):rest)) = do
       | actualType == expectedType = checkAll l expectedType
       | otherwise = throwError $ typeMismatchError expectedType actualType varCur
   checkAll itemSignatures expected
+  -- declare the variables
   s <- gets variableTypeValues
   let
     types = replicate (length itemSignatures) expected
     (locs, s') = generateLocationsForValues s types
   modify (modifyVariableTypeStore s')
   local (declareVariableTypes variableNames locs) (check (Sequence rest))
+
 check (Sequence ((FnDef cur fnType (Ident fnName) args body):rest)) = do
   s <- gets variableTypeValues
-  -- retLoc <- asks returnType
   retStore <- gets returnTypeValues
   fnReturnType <- getTypeFromSyntax fnType
   formalArgSignatures <- mapM getFunctionArgument args
+  -- check the body of the function with args and function defined
   let
     formalArgTypes = map snd formalArgSignatures
     formalTypes = map getTypeFromArgType formalArgTypes
@@ -299,13 +266,14 @@ check (Sequence ((FnDef cur fnType (Ident fnName) args body):rest)) = do
     ([retLoc], retStore') = generateLocationsForValues retStore [fnReturnType]
     envTransformFunction = declareFunctionType fnName f .
                            declareVariableTypes formalArgNames locs
-  modify (modifyReturnLocationStore retStore' .
-          modifyVariableTypeStore s')
+  modify (modifyReturnLocationStore retStore' . modifyVariableTypeStore s')
   local (declareReturnType retLoc . envTransformFunction) (checkBlock body)
+  -- check if the function returned (or is void)
   returnPresent <- checkReturnPresentBlock body
   unless
     (returnPresent || isVoid fnReturnType)
     (throwError $ TypeError ("there exists a path with no return in function " ++ fnName) cur)
+  -- check rest in an environment with the function
   local envTransformFunction (check (Sequence rest))
 check (Ret cur e) = do
   actualReturnType <- typeOf e
@@ -372,11 +340,13 @@ check (CondElse cur e caseTrue caseFalse) = do
       checkBlock caseFalse
     _ -> throwError $ TypeError "condition must be of type bool" cur
 check (Cond cur e bl) = check (CondElse cur e bl emptyBlock)
-check (Print _ e) = do
-  _ <- typeOf e
-  return ()
--- check i = throwError $ TypeError (show i) (0, 0)  -- TODO temporary
--- check i = return ()  -- TODO temporary
+check (Print cur e) = do
+  t <- typeOf e
+  case t of
+    TVoid -> throwError $ TypeError "can't print void" cur
+    _ -> return ()
+
+
 
 checkReturn :: Cursor -> TypeValue -> TypeCheckMonad
 checkReturn cur actualReturnType = do
@@ -390,25 +360,6 @@ checkReturn cur actualReturnType = do
         (throwError $ typeMismatchError expectedReturnType actualReturnType cur)
       Nothing -> throwError $ TypeError "return outside of a function" cur
 
-checkTypes :: CursorProgram -> IO TypeCheckResult
--- checkTypes (Program _ p) = return $ Right ()
-checkTypes (Program _ p) = do
-  let
-    r = TypeEnvironment {
-      variableTypes = Map.empty,
-      functionTypes = Map.empty,
-      returnType = Nothing
-    }
-    s = TypeStore {
-      variableTypeValues = Map.empty,
-      returnTypeValues = Map.empty
-    }
-  result <- evalStateT (runExceptT (runReaderT (check (Sequence p)) r)) s
-  case result of
-    Left l -> return $ Left l  -- these two Lefts have different types
-    Right () -> return $ Right ()
-
-
 checkReturnPresentBlock :: Block Cursor -> TypeCheckMonadT Bool
 checkReturnPresentBlock (Block _ is) = checkReturnPresent (Sequence is)
 
@@ -416,9 +367,68 @@ checkReturnPresent :: Statement -> TypeCheckMonadT Bool
 checkReturnPresent (Ret _ _) = return True
 checkReturnPresent (Sequence is) = do
   rets <- mapM checkReturnPresent is
-  return $ or rets  -- any statement in sequence must return
+  return $ or rets  -- some statement in sequence must return
 checkReturnPresent (CondElse _ _ caseTrue caseFalse) = do
   truePath <- checkReturnPresentBlock caseTrue
   falsePath <- checkReturnPresentBlock caseFalse
   return $ truePath && falsePath
 checkReturnPresent _ = return False
+
+
+{---------------------------------------------------------
+                    HELPER FUNCTIONS
+----------------------------------------------------------}
+declareVariableTypes :: [VariableName] -> [Location] -> TypeEnvironment -> TypeEnvironment
+declareVariableTypes xs ls env = env { variableTypes = insertManyValues xs ls (variableTypes env) }
+
+declareFunctionType :: FunctionName -> FunctionType -> TypeEnvironment -> TypeEnvironment
+declareFunctionType f t env = env { functionTypes = Map.insert f t (functionTypes env) }
+
+declareReturnType :: Location -> TypeEnvironment -> TypeEnvironment
+declareReturnType l env = env { returnType = Just l }
+
+modifyVariableTypeStore :: VariableTypeStore -> TypeStore -> TypeStore
+modifyVariableTypeStore s env = env { variableTypeValues = s }
+
+modifyReturnLocationStore :: ReturnTypeStore -> TypeStore -> TypeStore
+modifyReturnLocationStore s env = env { returnTypeValues = s }
+
+typeMismatchError :: TypeValue -> TypeValue -> Cursor -> Error
+typeMismatchError expectedType actualType =
+  TypeError (concat ["type mismatch: expected ", show expectedType, ", but got ", show actualType])
+
+instance Show TypeValue where
+  show t = showsType t "" where
+    showsType TInt = showString "int"
+    showsType TStr = showString "string"
+    showsType TBool = showString "bool"
+    showsType TVoid = showString "void"
+    showsType (TArray at) = shows at . showString "[]"
+    showsType (TTuple ts) = showString "<" . showString (intercalate ", " $ map show (Vector.toList ts)) . showString ">"
+
+isSimple :: TypeValue -> Bool
+isSimple TArray{} = False
+isSimple TTuple{} = False
+isSimple _ = True
+
+isArray :: TypeValue -> Bool
+isArray TArray{} = True
+isArray _ = False
+
+isVoid :: TypeValue -> Bool
+isVoid TVoid = True
+isVoid _ = False
+
+getTypeFromSyntax :: Type Cursor -> TypeCheckMonadT TypeValue
+getTypeFromSyntax (Int _) = return TInt
+getTypeFromSyntax (Str _) = return TStr
+getTypeFromSyntax (Bool _) = return TBool
+getTypeFromSyntax (Void _) = return TVoid
+getTypeFromSyntax (Array cur t) = do
+  vt <- getTypeFromSyntax t
+  let err = TypeError "array must be of a simple type" cur
+  if isSimple vt then return $ TArray vt else throwError err
+getTypeFromSyntax (Tuple cur ts) = do
+  vts <- mapM getTypeFromSyntax ts
+  let err = TypeError "tuple can't hold an array" cur
+  if any isArray vts then throwError err else return $ TTuple (Vector.fromList vts)
