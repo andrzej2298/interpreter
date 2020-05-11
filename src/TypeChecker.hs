@@ -66,6 +66,9 @@ checkTypes (Program _ p) = do
     Left l -> return $ Left l  -- these two Lefts have different types
     Right () -> return $ Right ()
 
+{---------------------------------------------------------
+                    EXPRESSION TYPES
+----------------------------------------------------------}
 typeOf :: Expression -> TypeCheckMonadT TypeValue
 typeOf (ELitInt _ _) = return TInt
 typeOf (ELitTrue _) = return TBool
@@ -97,9 +100,10 @@ typeOf (EArrExp cur exprs) = do
   let
     t = head types
     typeMismatch = any (/= t) types
-  if typeMismatch
-    then throwError $ TypeError "all elements in the array must be the same type" cur
-    else return $ TArray t
+  when
+    typeMismatch
+    throwError $ TypeError "all elements in the array must be the same type" cur
+  return $ TArray t
 typeOf (EAdd cur e1 op e2) = do
   t1 <- typeOf e1
   t2 <- typeOf e2
@@ -107,7 +111,7 @@ typeOf (EAdd cur e1 op e2) = do
     (TInt, TInt, _) -> return TInt
     (TStr, TStr, Plus _) -> return TStr
     (f1, f2, Plus _) -> throwError $ TypeError ("can't add " ++ show f1 ++ " to " ++ show f2) cur
-    (f1, f2, Minus _) -> throwError $ TypeError ("can't subtract " ++ show f1 ++ " from " ++ show f2) cur
+    (f1, f2, Minus _) -> throwError $ TypeError ("can't subtract " ++ show f2 ++ " from " ++ show f1) cur
 typeOf (EMul cur e1 _ e2) = do
   t1 <- typeOf e1
   t2 <- typeOf e2
@@ -225,6 +229,9 @@ checkIncrDecr cur x = do
 checkBlock :: Block Cursor -> TypeCheckMonad
 checkBlock (Block _ is) = check (Sequence is)
 
+{---------------------------------------------------------
+                    STATEMENT CORRECTNESS
+----------------------------------------------------------}
 check :: Statement -> TypeCheckMonad
 check Empty{} = return ()
 check (Sequence ((VarDecl cur t e):rest)) = do
@@ -347,7 +354,7 @@ check (Print cur e) = do
     _ -> return ()
 
 
-
+-- check if value returned by function is same as expected
 checkReturn :: Cursor -> TypeValue -> TypeCheckMonad
 checkReturn cur actualReturnType = do
   loc <- asks returnType
@@ -359,6 +366,7 @@ checkReturn cur actualReturnType = do
         (expectedReturnType /= actualReturnType)
         (throwError $ typeMismatchError expectedReturnType actualReturnType cur)
       Nothing -> throwError $ TypeError "return outside of a function" cur
+
 
 checkReturnPresentBlock :: Block Cursor -> TypeCheckMonadT Bool
 checkReturnPresentBlock (Block _ is) = checkReturnPresent (Sequence is)

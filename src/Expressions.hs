@@ -12,18 +12,16 @@ import CommonDeclarations
 
 
 eval :: Expression -> EvalMonad
--- LITERALS
+
+{---------------------------------------------------------
+                    LITERALS
+----------------------------------------------------------}
 eval (ELitInt _ n) = return $ VInt n
 eval (ELitTrue _) = return $ VBool True
 eval (ELitFalse _) = return $ VBool False
 eval (ETupLit _ exprs) = do
   vals <- mapM eval exprs
   return $ VTuple $ Vector.fromList vals
-eval (Neg _ e) = do
-  n <- eval e
-  case n of
-    (VInt v) -> return $ VInt (-v)
-    _ -> undefined
 eval (EArrDef cur t e) = do
   n <- eval e
   let
@@ -36,12 +34,11 @@ eval (EArrExp _ []) = undefined
 eval (EArrExp _ exprs) = do
   vals <- mapM eval exprs
   return $ VArray (Vector.fromList vals)
-eval (Not _ e) = do
-  b <- eval e
-  case b of
-    (VBool v) -> return $ VBool (not v)
-    _ -> undefined
 eval (EString _ s) = return $ VString $ filter (/='"') s
+
+{---------------------------------------------------------
+                    VARIABLES AND FUNCTIONS
+----------------------------------------------------------}
 eval (EVar _ (Ident x)) = getVariableValue x
 eval (EApp _ (Ident fn) args) =
   case fn of
@@ -59,7 +56,15 @@ eval (EItemInd cur (Ident x) e) = do
     (VInt v, VArray vec) -> indexLookup vec v
     (VInt v, VTuple vec) -> indexLookup vec v
     _ -> undefined
--- ARITHMETIC OPERATIONS
+
+{---------------------------------------------------------
+                    ARITHMETIC OPERATIONS
+----------------------------------------------------------}
+eval (Neg _ e) = do
+  n <- eval e
+  case n of
+    (VInt v) -> return $ VInt (-v)
+    _ -> undefined
 eval (EAdd _ e1 op e2) = do
   let opfun = case op of
                 (Plus _) -> (+)
@@ -96,20 +101,34 @@ eval (ERel _ e1 op e2) = do
     (_, _, EQU _) -> return $ VBool $ f1 == f2
     (_, _, NEQ _) -> return $ VBool $ f1 /= f2
     _ -> undefined
+
+{---------------------------------------------------------
+                    LOGIC OPERATIONS
+----------------------------------------------------------}
+eval (Not _ e) = do
+  b <- eval e
+  case b of
+    (VBool v) -> return $ VBool (not v)
+    _ -> undefined
 eval (EAnd _ e1 e2) = do
-  b1 <- eval e1  -- lazy evaluation of logic expressions
+  b1 <- eval e1
   case b1 of
+    -- lazy evaluation of logic expressions
     VBool False -> return $ VBool False
     VBool True -> evalSecond e2
     _ -> undefined
 eval (EOr _ e1 e2) = do
-  b1 <- eval e1  -- lazy evaluation of logic expressions
+  b1 <- eval e1
   case b1 of
+    -- lazy evaluation of logic expressions
     VBool True -> return $ VBool True
     VBool False -> evalSecond e2
     _ -> undefined
 
 
+{---------------------------------------------------------
+                    HELPER FUNCTIONS
+----------------------------------------------------------}
 evalSecond :: Expression -> EvalMonad
 evalSecond e = do
   b <- eval e
@@ -123,7 +142,6 @@ applyFunction fn args = do
   case Map.lookup fn r of
     Just f -> f args
     Nothing -> undefined
-
 
 getArrayLength :: [Expression] -> EvalMonad
 getArrayLength [e] = do

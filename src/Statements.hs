@@ -31,7 +31,7 @@ processExpValue e f = do
 execBlock :: Block Cursor -> ExecMonad
 execBlock (Block _ is) = exec (Sequence is)
 
--- check if a jump statement has been issued (return / break / continue)
+-- checks if a jump statement has been issued (return / break / continue)
 -- if so, ignores the statement
 exec :: Statement -> ExecMonad
 exec e = do
@@ -43,7 +43,6 @@ exec e = do
 
 internalExec :: Statement -> ExecMonad
 internalExec (Empty _) = return ()
-
 internalExec (Sequence []) = return ()
 internalExec (Sequence ((VarDecl _ varType ds):rest)) = declareVariablesAndExecuteRest varType ds (Sequence rest)
 internalExec (Sequence ((FnDef _ fnType (Ident fnName) args (Block _ body)):rest)) =
@@ -51,6 +50,12 @@ internalExec (Sequence ((FnDef _ fnType (Ident fnName) args (Block _ body)):rest
 internalExec (Sequence (i:is)) = do
   exec i
   exec (Sequence is)
+internalExec d@VarDecl{} = exec (Sequence [d])  -- no instructions are after this variable declaration
+internalExec d@FnDef{} = exec (Sequence [d])  -- no instructions are after this function declaration
+internalExec (Print _ e) = processExpValue e printValue where
+  printValue (VString s) = liftIO $ putStrLn s
+  printValue v = liftIO $ putStrLn $ show v
+internalExec (SExp _ e) = processExpValue e (const $ return ())
 
 {---------------------------------------------------------
                     JUMP STATEMENTS
@@ -61,9 +66,6 @@ internalExec (Ret _ e) = do
 internalExec (VRet _) = setControlValue ReturnParameter (ReturnValue (Just VoidValue))
 internalExec (Break _) = setControlValue BreakParameter (Flag True)
 internalExec (Continue _) = setControlValue ContinueParameter (Flag True)
-
-internalExec d@VarDecl{} = exec (Sequence [d])  -- no instructions are after this variable declaration
-internalExec d@FnDef{} = exec (Sequence [d])  -- no instructions are after this function declaration
 
 {---------------------------------------------------------
                     ASSIGNMENT STATEMENTS
@@ -95,12 +97,6 @@ internalExec (TupTie _ tievars e) = do
     _ -> undefined
 internalExec (Incr cur ident) = exec (Assign cur ident (EAdd cur (EVar cur ident) (Plus cur) (ELitInt cur 1)))
 internalExec (Decr cur ident) = exec (Assign cur ident (EAdd cur (EVar cur ident) (Minus cur) (ELitInt cur 1)))
-
-internalExec (Print _ e) = processExpValue e printValue where
-  printValue (VString s) = liftIO $ putStrLn s
-  printValue v = liftIO $ putStrLn $ show v
-internalExec (SExp _ e) = processExpValue e (const $ return ())
-
 
 {---------------------------------------------------------
                     CONDITIONALS AND LOOPS
@@ -148,7 +144,7 @@ whileLoop e body whileEnv breakLoc continueLoc = do
 
 
 {---------------------------------------------------------
-                    VARIABLES
+                    VARIABLES HELPER FUNCTIONS
 ----------------------------------------------------------}
 declareVariablesAndExecuteRest :: Type Cursor -> [Item Cursor] -> Statement -> ExecMonad
 declareVariablesAndExecuteRest varType items followingInstructions = do
@@ -168,7 +164,7 @@ declareVariablesAndExecuteRest varType items followingInstructions = do
 
 
 {---------------------------------------------------------
-                    FUNCTIONS
+                    FUNCTIONS HELPER FUNCTIONS
 ----------------------------------------------------------}
 declareFunctionAndExecuteRest :: Type Cursor -> FunctionName -> [Arg Cursor] -> Statement -> Statement -> ExecMonad
 declareFunctionAndExecuteRest fnType fnName formalArgs body rest = do

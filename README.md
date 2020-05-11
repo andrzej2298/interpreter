@@ -35,5 +35,21 @@ oraz flagi umożliwiające wywołanie instrukcji `break` i `continue`
 
 **Środowisko** używane do **kontroli typów** jest skonstruowane analogicznie
 do środowiska interpretacji. Różnica polega na tym, że przechowywane
-są tylo typy. Dodatkowo, nie jest konieczne przechowywanie informacji
-o instrukcjach `break` i `continue`, ponieważ 
+są tylko typy. Dodatkowo, nie jest konieczne przechowywanie informacji
+o instrukcjach `break` i `continue`, ponieważ poza pętlami są one ignorowane.
+
+## Krotki i tablice
+
+Elementy krotek i tablic przechowywane są w wektorach z `Data.Vector`.
+Daje to stały czas dostępu do elementów krotki/tablicy oraz
+stały czas sprawdzenia długości tablicy.
+
+## Przykłady
+
+Ponieważ ciężko zilustrować poprawnym programem podpunkty:
+
+- obsługa błędów wykonania
+- statyczne typowanie
+
+zostały one pominięte w katalogu `good`. Są natomiast przykłady
+ilustrujące te podpunkty w katalogu `bad`.
