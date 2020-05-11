@@ -100,10 +100,9 @@ typeOf (EArrExp cur exprs) = do
   let
     t = head types
     typeMismatch = any (/= t) types
-  when
-    typeMismatch
-    throwError $ TypeError "all elements in the array must be the same type" cur
-  return $ TArray t
+  if typeMismatch
+    then throwError $ TypeError "all elements in the array must be the same type" cur
+    else return $ TArray t
 typeOf (EAdd cur e1 op e2) = do
   t1 <- typeOf e1
   t2 <- typeOf e2
