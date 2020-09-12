@@ -1,55 +1,71 @@
-# Opis
+# Language description
 
-## Struktura plików
+A statically typed imperative language
+with syntax similar to C, C++, and, Java.
+Basic statements (loops, conditionals,
+variable declaration itp.)
+are semantically similar to their counterparts in those languages.
 
-kod źródłowy znajduje się w katalogu `src`
+# Simple types
 
-- `Interpreter.hs` - kod uruchamiający
-    1. parser
-    2. analizator statyczny
-    3. interpreter
-- `CommonDeclarations.hs` - deklaracje zmiennych i funkcji
-   używanych w innych plikach
-- `Expressions.hs` - kod odpowiedzialny za interpretację wyrażeń
-- `Statements.hs` - kod odpowiedzialny za interpretację instrukcji
-- `TypeChecker.hs` - kod odpowiedzialny za kontrolę
-  statyczną
+- int
+- bool
+- string
+- void (for functions)
 
-## Wykonanie instrukcji
+# Complex types
 
-Ze względu na instrukcje wymagające skoku w kodzie
-(return, break, continue), funkcja wykonująca instrukcje
-jest podzielona na dwie warstwy: funkcję `exec` która sprawdza,
-czy kolejna instrukcja powinna zostać pominięta
-oraz funkcję `internalExec`, wykonująca faktyczną interpretację.
+## Arrays
 
-## Zmienne, funkcje, środowisko
+- constant length arrays of int, bool, string (no arrays of arrays or arrays of tuples)
+- syntax similar to Javy
+- len() function
+- can be initialized with a literal or length and default value
+- item access via square brackets
+- items can also be updated via square brackets
 
-W celu implementacji statycznej widoczności
-oraz przysłaniania identyfikatorów **środowisko interpretacji**
-podzielone jest na dwie części: `Environment` oraz `Store`.
-Dodatkowo, oprócz zmiennych i funkcji w środowisku przechowywana
-jest informacja o wynikach funkcji (`ReturnParameter`)
-oraz flagi umożliwiające wywołanie instrukcji `break` i `continue`
-(odpowiednio `BreakParameter` oraz `ContinueParameter`).
+```
+int[] a = {1,2,3};
+int[] b = new int[10];
 
-**Środowisko** używane do **kontroli typów** jest skonstruowane analogicznie
-do środowiska interpretacji. Różnica polega na tym, że przechowywane
-są tylko typy. Dodatkowo, nie jest konieczne przechowywanie informacji
-o instrukcjach `break` i `continue`, ponieważ poza pętlami są one ignorowane.
+int c = a[0];
+b[0] = 1;
+int e = len(a);
+```
 
-## Krotki i tablice
+## Nested tuples
 
-Elementy krotek i tablic przechowywane są w wektorach z `Data.Vector`.
-Daje to stały czas dostępu do elementów krotki/tablicy oraz
-stały czas sprawdzenia długości tablicy.
+- nested tuples of int, bool, string (arrays are not allowed)
+- variable assignment from tuple, tie, inspired by std::tie from C++,
+  (but nested assignment is allowed, unlike in C++)
+- item access via square brackets
+- because of static control, access index must be a constant,
+  not an expression evaluated at runtime
 
-## Przykłady
+```
+<int, bool, string> x = new tuple(1, true, "string");
 
-Ponieważ ciężko zilustrować poprawnym programem podpunkty:
+int i; bool a; string s;
+tie (i, b, s) = y;
 
-- obsługa błędów wykonania
-- statyczne typowanie
+bool d = y[1];
+```
 
-zostały one pominięte w katalogu `good`. Są natomiast przykłady
-ilustrujące te podpunkty w katalogu `bad`.
+# Functions
+
+arbitrarily nested functions with static name binding (similar to Pascal)
+
+# Errors
+
+error handling, including printing the line number in code where the error occurred
+
+# Implementation details
+
+Some implementation details are described in the `IMPLEMENTATION_DETAILS.md`.
+
+
+# Examples
+
+Correct program examples are in the `good` folder.
+Incorrect program examples are in the `bad` folder.
+
